@@ -1,0 +1,21 @@
+export default function OwnerLoading() {
+  return (
+    <div className="flex flex-col gap-lg">
+      <div className="h-8 w-48 animate-pulse rounded-md bg-surface-soft" />
+      <div className="grid grid-cols-1 gap-md sm:grid-cols-2 lg:grid-cols-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex flex-col gap-2 overflow-hidden rounded-lg border border-border"
+          >
+            <div className="aspect-[4/3] w-full animate-pulse bg-surface-soft" />
+            <div className="flex flex-col gap-2 p-md">
+              <div className="h-4 w-3/4 animate-pulse rounded bg-surface-soft" />
+              <div className="h-3 w-1/3 animate-pulse rounded bg-surface-soft" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
