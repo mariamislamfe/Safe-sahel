@@ -29,16 +29,27 @@ export default async function GuestBookingsPage() {
     .order("created_at", { ascending: false });
   if (error) throw error;
 
-  const properties = new Map<string, { title: string; slug: string }>();
+  const properties = new Map<string, { title: string; slug: string; ownerId: string }>();
+  const hostByOwnerId = new Map<string, { fullName: string | null; phone: string | null }>();
   if (bookings && bookings.length > 0) {
     const { data: rows } = await supabase
       .from("properties")
-      .select("id, title, slug")
+      .select("id, title, slug, owner_id")
       .in(
         "id",
         bookings.map((b) => b.property_id),
       );
-    for (const row of rows ?? []) properties.set(row.id, { title: row.title, slug: row.slug });
+    for (const row of rows ?? [])
+      properties.set(row.id, { title: row.title, slug: row.slug, ownerId: row.owner_id });
+
+    const ownerIds = [...new Set((rows ?? []).map((r) => r.owner_id))];
+    if (ownerIds.length > 0) {
+      const { data: owners } = await supabase
+        .from("profiles")
+        .select("id, full_name, phone")
+        .in("id", ownerIds);
+      for (const o of owners ?? []) hostByOwnerId.set(o.id, { fullName: o.full_name, phone: o.phone });
+    }
   }
 
   const { data: reviewedRows } = await supabase
@@ -81,6 +92,7 @@ export default async function GuestBookingsPage() {
               booking.check_out < today &&
               !reviewedBookingIds.has(booking.id);
             const handover = handoverByBookingId.get(booking.id);
+            const host = property ? hostByOwnerId.get(property.ownerId) : undefined;
 
             return (
               <div
@@ -118,6 +130,29 @@ export default async function GuestBookingsPage() {
                       )}
                   </div>
                 </div>
+
+                {booking.status === "confirmed" && (
+                  <div className="flex flex-wrap items-center gap-sm rounded-md bg-surface-soft px-md py-sm text-sm">
+                    <span className="text-ink-secondary">
+                      Host: {host?.fullName ?? "Safe Sahel user"}
+                    </span>
+                    {host?.phone ? (
+                      <span className="flex gap-sm">
+                        <a href={`tel:${host.phone}`} className="font-medium text-turquoise-dark">
+                          Call
+                        </a>
+                        <a
+                          href={`https://wa.me/${host.phone.replace(/\D/g, "").replace(/^0/, "20")}`}
+                          className="font-medium text-turquoise-dark"
+                        >
+                          WhatsApp
+                        </a>
+                      </span>
+                    ) : (
+                      <span className="text-xs text-ink-secondary">No phone number added yet</span>
+                    )}
+                  </div>
+                )}
 
                 {booking.status === "cancelled" && Number(booking.cancellation_fee_amount) > 0 && (
                   <p className="rounded-md bg-red-50 px-md py-sm text-xs text-red-700">
