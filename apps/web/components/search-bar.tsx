@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 function SearchIcon() {
@@ -17,15 +17,29 @@ function SearchIcon() {
   );
 }
 
-export function SearchBar() {
+export function SearchBar({ locations = [] }: { locations?: string[] }) {
   const router = useRouter();
   const [location, setLocation] = useState("");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const blurTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const suggestions = useMemo(() => {
+    const needle = location.trim().toLowerCase();
+    if (!needle) return [];
+    return locations.filter((name) => name.toLowerCase().includes(needle)).slice(0, 6);
+  }, [location, locations]);
+
+  function selectSuggestion(name: string) {
+    setLocation(name);
+    setSuggestionsOpen(false);
+  }
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    setSuggestionsOpen(false);
     const params = new URLSearchParams();
     if (location) params.set("location", location);
     if (checkIn) params.set("checkIn", checkIn);
@@ -39,16 +53,45 @@ export function SearchBar() {
       onSubmit={submit}
       className="mx-auto flex w-full max-w-4xl flex-col gap-2 rounded-2xl border border-border bg-surface p-2 shadow-xl shadow-ink/5 sm:flex-row sm:items-center sm:rounded-full"
     >
-      <label className="flex min-w-0 flex-1 flex-col gap-0.5 px-md py-sm">
+      <label className="relative flex min-w-0 flex-1 flex-col gap-0.5 px-md py-sm">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-secondary">
           Where
         </span>
         <input
           value={location}
-          onChange={(e) => setLocation(e.target.value)}
+          onChange={(e) => {
+            setLocation(e.target.value);
+            setSuggestionsOpen(true);
+          }}
+          onFocus={() => setSuggestionsOpen(true)}
+          onBlur={() => {
+            // Delayed so a click on a suggestion registers before the list closes.
+            blurTimeout.current = setTimeout(() => setSuggestionsOpen(false), 150);
+          }}
           placeholder="Search Sahel, compound, or property"
+          autoComplete="off"
           className="w-full min-w-0 bg-transparent text-sm text-ink outline-none placeholder:text-ink-secondary"
         />
+
+        {suggestionsOpen && suggestions.length > 0 && (
+          <ul className="absolute inset-x-0 top-full z-10 mt-2 flex flex-col overflow-hidden rounded-xl border border-border bg-surface py-1 shadow-lg shadow-ink/10">
+            {suggestions.map((name) => (
+              <li key={name}>
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    if (blurTimeout.current) clearTimeout(blurTimeout.current);
+                    selectSuggestion(name);
+                  }}
+                  className="block w-full px-md py-sm text-start text-sm text-ink hover:bg-surface-soft"
+                >
+                  {name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </label>
 
       <div className="hidden h-8 w-px shrink-0 bg-border sm:block" />

@@ -184,6 +184,10 @@ export const dictionary = {
       sayHello: "Say hello 👋",
       placeholder: "Type a message…",
       send: "Send",
+      sent: "Sent",
+      seen: "Seen",
+      online: "Online",
+      typing: "Typing…",
       viewAll: "Open full inbox",
     },
     budgetPlanner: {
@@ -370,6 +374,10 @@ export const dictionary = {
       sayHello: "قول أهلاً 👋",
       placeholder: "اكتب رسالة…",
       send: "إرسال",
+      sent: "اتبعتت",
+      seen: "اتشافت",
+      online: "متصل الآن",
+      typing: "بيكتب…",
       viewAll: "افتح كل الرسائل",
     },
     budgetPlanner: {

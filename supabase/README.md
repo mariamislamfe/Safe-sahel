@@ -89,6 +89,10 @@ running them in order once is enough; there's no down-migration story yet.
   `property_inventory_items.photo_url` + the `inventory-photos` bucket, so
   each inventory item has a reference photo guests can see up front and
   the handover photos get compared against.
+- `0016_message_read_receipts.sql` — adds the UPDATE policy `messages` was
+  missing entirely (marking a message read was always silently rejected by
+  RLS, so the unread badge never actually cleared), and full replica
+  identity so read-receipt ticks update live over Realtime.
 
 Optionally also run [`seed.sql`](./seed.sql) for a handful of real North
 Coast compound names and a starter amenities catalog to develop against.

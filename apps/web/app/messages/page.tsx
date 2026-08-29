@@ -31,7 +31,10 @@ export default async function MessagesPage() {
               href={`/messages/${c.id}`}
               className="flex flex-col gap-1 p-lg hover:bg-surface-soft"
             >
-              <p className="font-medium text-ink">{c.otherPersonName}</p>
+              <p className="flex items-center gap-sm font-medium text-ink">
+                {c.unread && <span className="size-1.5 shrink-0 rounded-full bg-turquoise" />}
+                {c.otherPersonName}
+              </p>
               {c.propertyTitle && <p className="text-sm text-ink-secondary">{c.propertyTitle}</p>}
               <p className="text-xs text-ink-secondary">
                 {new Date(c.lastMessageAt).toLocaleString()}

@@ -1,6 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getConversationDetail, getMessages } from "@/lib/queries/messages";
+import { getLocale } from "@/lib/locale";
+import { getDictionary } from "@/lib/i18n/dictionary";
 import { ChatThread } from "@/components/chat-thread";
 
 export default async function ConversationPage(props: PageProps<"/messages/[id]">) {
@@ -15,6 +17,8 @@ export default async function ConversationPage(props: PageProps<"/messages/[id]"
   if (!conversation) notFound();
 
   const messages = await getMessages(id);
+  const otherUserId = user.id === conversation.guestId ? conversation.ownerId : conversation.guestId;
+  const t = getDictionary(await getLocale()).messenger;
 
   return (
     <main className="mx-auto flex max-w-2xl flex-col gap-lg px-lg py-2xl">
@@ -33,7 +37,21 @@ export default async function ConversationPage(props: PageProps<"/messages/[id]"
           .
         </p>
       </div>
-      <ChatThread conversationId={id} currentUserId={user.id} initialMessages={messages} />
+      <ChatThread
+        conversationId={id}
+        currentUserId={user.id}
+        otherUserId={otherUserId}
+        initialMessages={messages}
+        labels={{
+          sayHello: t.sayHello,
+          placeholder: t.placeholder,
+          send: t.send,
+          sent: t.sent,
+          seen: t.seen,
+          online: t.online,
+          typing: t.typing,
+        }}
+      />
     </main>
   );
 }
