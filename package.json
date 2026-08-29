@@ -1,0 +1,23 @@
+{
+  "name": "safe-sahel",
+  "private": true,
+  "packageManager": "pnpm@10.12.3",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:web": "turbo run dev --filter=@safe-sahel/web",
+    "dev:mobile": "turbo run start --filter=@safe-sahel/mobile",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.3"
+  }
+}

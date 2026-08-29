@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+dist/
+build/
+.expo/
+.turbo/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+
+# expo
+.expo-shared/
+ios/
+android/
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# local tooling session state (root only — apps/mobile/.claude is a
+# legitimate part of the Expo template and should stay tracked)
+/.claude/
+
+# editor / os
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+Thumbs.db
+
+# supabase
+supabase/.branches
+supabase/.temp
