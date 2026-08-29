@@ -114,7 +114,7 @@ export default async function HomePage() {
           <p className="max-w-xl text-balance text-lg text-white/85">{t.lede}</p>
 
           <div className="mt-md w-full">
-            <SearchBar />
+            <SearchBar locations={locations.map((l) => l.name)} />
           </div>
         </div>
       </section>

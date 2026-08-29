@@ -11,6 +11,7 @@ import type { ChatMessage } from "@/lib/queries/messages";
 
 type ConversationRow = {
   id: string;
+  otherPersonId: string;
   otherPersonName: string;
   propertyTitle: string | null;
   lastMessageAt: string;
@@ -38,6 +39,7 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeMessages, setActiveMessages] = useState<ChatMessage[]>([]);
   const [activeTitle, setActiveTitle] = useState<string>("");
+  const [activeOtherUserId, setActiveOtherUserId] = useState<string>("");
 
   const loadConversations = useCallback(async () => {
     if (!profile) return;
@@ -80,6 +82,7 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
         const otherId = c.guest_id === profile.id ? c.owner_id : c.guest_id;
         return {
           id: c.id,
+          otherPersonId: otherId,
           otherPersonName: nameById.get(otherId) ?? "Safe Sahel user",
           propertyTitle: c.property_id ? (titleById.get(c.property_id) ?? null) : null,
           lastMessageAt: c.last_message_at,
@@ -106,11 +109,12 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
   async function openConversation(conversation: ConversationRow) {
     setActiveId(conversation.id);
     setActiveTitle(conversation.otherPersonName);
+    setActiveOtherUserId(conversation.otherPersonId);
     const supabase = createClient();
 
     const { data: messages } = await supabase
       .from("messages")
-      .select("id, conversation_id, sender_id, body, created_at")
+      .select("id, conversation_id, sender_id, body, created_at, read_at")
       .eq("conversation_id", conversation.id)
       .order("created_at", { ascending: true });
 
@@ -121,20 +125,15 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
         senderId: m.sender_id,
         body: m.body,
         createdAt: m.created_at,
+        readAt: m.read_at,
       })),
     );
 
-    if (profile) {
-      await supabase
-        .from("messages")
-        .update({ read_at: new Date().toISOString() })
-        .eq("conversation_id", conversation.id)
-        .neq("sender_id", profile.id)
-        .is("read_at", null);
-      setConversations((prev) =>
-        prev ? prev.map((c) => (c.id === conversation.id ? { ...c, unread: false } : c)) : prev,
-      );
-    }
+    // ChatThread marks unread messages read itself on mount — just reflect
+    // that in the list's badge right away instead of waiting on a refetch.
+    setConversations((prev) =>
+      prev ? prev.map((c) => (c.id === conversation.id ? { ...c, unread: false } : c)) : prev,
+    );
   }
 
   if (!profile) return null;
@@ -174,8 +173,17 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
               <ChatThread
                 conversationId={activeId}
                 currentUserId={profile.id}
+                otherUserId={activeOtherUserId}
                 initialMessages={activeMessages}
-                labels={{ sayHello: t.sayHello, placeholder: t.placeholder, send: t.send }}
+                labels={{
+                  sayHello: t.sayHello,
+                  placeholder: t.placeholder,
+                  send: t.send,
+                  sent: t.sent,
+                  seen: t.seen,
+                  online: t.online,
+                  typing: t.typing,
+                }}
                 compact
               />
             </div>

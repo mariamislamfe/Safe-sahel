@@ -5,6 +5,7 @@ export type ConversationSummary = {
   otherPersonName: string;
   propertyTitle: string | null;
   lastMessageAt: string;
+  unread: boolean;
 };
 
 export async function getConversations(userId: string): Promise<ConversationSummary[]> {
@@ -20,16 +21,24 @@ export async function getConversations(userId: string): Promise<ConversationSumm
 
   const otherIds = conversations.map((c) => (c.guest_id === userId ? c.owner_id : c.guest_id));
   const propertyIds = conversations.map((c) => c.property_id).filter((id): id is string => !!id);
+  const conversationIds = conversations.map((c) => c.id);
 
-  const [{ data: profiles }, { data: properties }] = await Promise.all([
+  const [{ data: profiles }, { data: properties }, { data: unreadMessages }] = await Promise.all([
     supabase.from("profiles").select("id, full_name").in("id", otherIds),
     propertyIds.length > 0
       ? supabase.from("properties").select("id, title").in("id", propertyIds)
       : Promise.resolve({ data: [] as { id: string; title: string }[] }),
+    supabase
+      .from("messages")
+      .select("conversation_id")
+      .in("conversation_id", conversationIds)
+      .neq("sender_id", userId)
+      .is("read_at", null),
   ]);
 
   const nameById = new Map((profiles ?? []).map((p) => [p.id, p.full_name]));
   const titleById = new Map((properties ?? []).map((p) => [p.id, p.title]));
+  const unreadConversationIds = new Set((unreadMessages ?? []).map((m) => m.conversation_id));
 
   return conversations.map((c) => {
     const otherId = c.guest_id === userId ? c.owner_id : c.guest_id;
@@ -38,6 +47,7 @@ export async function getConversations(userId: string): Promise<ConversationSumm
       otherPersonName: nameById.get(otherId) ?? "Safe Sahel user",
       propertyTitle: c.property_id ? (titleById.get(c.property_id) ?? null) : null,
       lastMessageAt: c.last_message_at,
+      unread: unreadConversationIds.has(c.id),
     };
   });
 }
@@ -90,13 +100,14 @@ export type ChatMessage = {
   senderId: string;
   body: string;
   createdAt: string;
+  readAt: string | null;
 };
 
 export async function getMessages(conversationId: string): Promise<ChatMessage[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("messages")
-    .select("id, conversation_id, sender_id, body, created_at")
+    .select("id, conversation_id, sender_id, body, created_at, read_at")
     .eq("conversation_id", conversationId)
     .order("created_at", { ascending: true });
 
@@ -106,5 +117,6 @@ export async function getMessages(conversationId: string): Promise<ChatMessage[]
     senderId: m.sender_id,
     body: m.body,
     createdAt: m.created_at,
+    readAt: m.read_at,
   }));
 }
