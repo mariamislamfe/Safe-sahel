@@ -10,6 +10,7 @@ export type CurrentProfile = {
   fullName: string | null;
   avatarUrl: string | null;
   username: string | null;
+  phone: string | null;
   role: UserRoleEnum;
   verified: boolean;
 };
@@ -39,7 +40,7 @@ export function useCurrentProfile() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("full_name, avatar_url, username, role, verified")
+      .select("full_name, avatar_url, username, phone, role, verified")
       .eq("id", user.id)
       .single();
 
@@ -49,6 +50,7 @@ export function useCurrentProfile() {
       fullName: data?.full_name ?? null,
       avatarUrl: data?.avatar_url ?? null,
       username: data?.username ?? null,
+      phone: data?.phone ?? null,
       role: data?.role ?? "guest",
       verified: data?.verified ?? false,
     });

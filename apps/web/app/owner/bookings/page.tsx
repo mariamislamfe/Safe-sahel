@@ -3,7 +3,6 @@ import Link from "next/link";
 import { formatEgp } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/server";
 import { getOwnerBookings } from "@/lib/queries/owner-bookings";
-import { MessageHostButton } from "@/components/message-host-button";
 import { GuestReviewForm } from "@/components/guest-review-form";
 
 const statusStyles: Record<string, string> = {
@@ -66,12 +65,6 @@ export default async function OwnerBookingsPage() {
                   >
                     {booking.status.replace("_", " ")}
                   </span>
-                  <MessageHostButton
-                    propertyId={booking.propertyId}
-                    ownerId={user.id}
-                    guestId={booking.guestId}
-                    label="Message guest"
-                  />
                   {booking.status === "confirmed" && (
                     <Link
                       href={`/owner/bookings/${booking.id}/handover`}
@@ -83,10 +76,24 @@ export default async function OwnerBookingsPage() {
                 </div>
               </div>
               {booking.status === "confirmed" && (
-                <p className="text-xs text-ink-secondary">
-                  Bookings confirm instantly now — no accept/decline needed. Message the guest to
-                  arrange the deposit and check-in details.
-                </p>
+                <div className="flex flex-wrap items-center gap-sm rounded-md bg-surface-soft px-md py-sm text-sm">
+                  <span className="text-ink-secondary">Contact the guest to arrange the deposit:</span>
+                  {booking.guestPhone ? (
+                    <span className="flex gap-sm">
+                      <a href={`tel:${booking.guestPhone}`} className="font-medium text-turquoise-dark">
+                        Call
+                      </a>
+                      <a
+                        href={`https://wa.me/${booking.guestPhone.replace(/\D/g, "").replace(/^0/, "20")}`}
+                        className="font-medium text-turquoise-dark"
+                      >
+                        WhatsApp
+                      </a>
+                    </span>
+                  ) : (
+                    <span className="text-xs text-ink-secondary">No phone number added yet</span>
+                  )}
+                </div>
               )}
               {booking.status === "confirmed" &&
                 booking.checkOut < today &&

@@ -3,7 +3,6 @@ import { Plus_Jakarta_Sans, Inter, Tajawal } from "next/font/google";
 import { getLocale } from "@/lib/locale";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { MessengerWidget } from "@/components/messenger-widget";
 import "./globals.css";
 
 const display = Plus_Jakarta_Sans({
@@ -44,7 +43,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <SiteHeader locale={locale} />
         <div className="flex-1 pt-16">{children}</div>
         <SiteFooter locale={locale} />
-        <MessengerWidget locale={locale} />
       </body>
     </html>
   );

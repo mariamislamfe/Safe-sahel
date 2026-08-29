@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { formatEgp } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/server";
-import { MessageHostButton } from "@/components/message-host-button";
+import { ContactCard } from "@/components/contact-card";
 
 export default async function BookingConfirmationPage(
   props: PageProps<"/booking/[id]/confirmation">,
@@ -29,10 +29,14 @@ export default async function BookingConfirmationPage(
     .eq("id", booking.property_id)
     .maybeSingle();
 
+  const { data: owner } = property?.owner_id
+    ? await supabase.from("profiles").select("full_name, phone").eq("id", property.owner_id).maybeSingle()
+    : { data: null };
+
   const nextSteps = [
     {
-      title: "Message the host now",
-      body: "Coordinate the security deposit and your arrival time — everything stays inside Safe Sahel.",
+      title: "Contact the host directly",
+      body: "Call or WhatsApp them below to arrange the security deposit and your arrival time.",
     },
     {
       title: "Pay at check-in",
@@ -61,23 +65,9 @@ export default async function BookingConfirmationPage(
         </p>
       </div>
 
-      {property?.owner_id && (
-        <div className="flex flex-col items-center gap-xs">
-          <MessageHostButton
-            propertyId={booking.property_id}
-            ownerId={property.owner_id}
-            guestId={user.id}
-            label="Message the host"
-          />
-          <p className="text-xs text-ink-secondary">
-            No reply within 24 hours? Let us know at{" "}
-            <a href="https://wa.me/201123094983" className="font-medium text-turquoise-dark">
-              01123094983
-            </a>
-            .
-          </p>
-        </div>
-      )}
+      <div className="w-full">
+        <ContactCard label="Your host" name={owner?.full_name ?? null} phone={owner?.phone ?? null} />
+      </div>
 
       <div className="flex w-full flex-col gap-md rounded-2xl border border-border p-lg text-start">
         <p className="font-display text-sm font-semibold text-ink">What happens next</p>

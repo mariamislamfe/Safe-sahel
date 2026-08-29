@@ -10,7 +10,6 @@ import { getPropertyUnavailableRanges } from "@/lib/queries/availability";
 import { getPropertyInventory } from "@/lib/queries/owner";
 import { BookingForm } from "@/components/booking-form";
 import { FavoriteButton } from "@/components/favorite-button";
-import { MessageHostButton } from "@/components/message-host-button";
 import { PropertyGallery } from "@/components/property-gallery";
 import { RatingBreakdown } from "@/components/rating-breakdown";
 import { FaqAccordion } from "@/components/faq-accordion";
@@ -112,7 +111,6 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
                     Verified
                   </span>
                 )}
-                <MessageHostButton propertyId={property.id} ownerId={property.ownerId} />
                 <FavoriteButton propertyId={property.id} />
               </div>
             </div>

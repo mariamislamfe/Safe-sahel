@@ -10,6 +10,7 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
   const router = useRouter();
   const [fullName, setFullName] = useState(profile.fullName ?? "");
   const [username, setUsername] = useState(profile.username ?? "");
+  const [phone, setPhone] = useState(profile.phone ?? "");
   const [avatarUrl, setAvatarUrl] = useState(profile.avatarUrl);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -49,7 +50,7 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
     const supabase = createClient();
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ full_name: fullName || null, username: username || null })
+      .update({ full_name: fullName || null, username: username || null, phone: phone || null })
       .eq("id", profile.id);
 
     setSavingProfile(false);
@@ -117,6 +118,20 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
             className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
           />
           <span className="text-xs text-ink-secondary">Lets other people find your profile.</span>
+        </label>
+        <label className="flex flex-col gap-xs">
+          <span className="text-sm font-medium text-ink">Phone number</span>
+          <input
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="e.g. 01123094983"
+            className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+          />
+          <span className="text-xs text-ink-secondary">
+            Shown to the other side once a booking on your account is confirmed, so you can
+            coordinate directly.
+          </span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}

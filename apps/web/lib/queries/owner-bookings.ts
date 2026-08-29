@@ -7,6 +7,7 @@ export type OwnerBookingItem = {
   guestId: string;
   propertyTitle: string;
   guestName: string | null;
+  guestPhone: string | null;
   checkIn: string;
   checkOut: string;
   guestsCount: number;
@@ -39,13 +40,14 @@ export async function getOwnerBookings(ownerId: string): Promise<OwnerBookingIte
 
   const { data: guests } = await supabase
     .from("profiles")
-    .select("id, full_name")
+    .select("id, full_name, phone")
     .in(
       "id",
       bookings.map((b) => b.guest_id),
     );
 
   const guestNameById = new Map((guests ?? []).map((g) => [g.id, g.full_name]));
+  const guestPhoneById = new Map((guests ?? []).map((g) => [g.id, g.phone]));
 
   return bookings.map((b) => ({
     id: b.id,
@@ -53,6 +55,7 @@ export async function getOwnerBookings(ownerId: string): Promise<OwnerBookingIte
     guestId: b.guest_id,
     propertyTitle: propertyTitleById.get(b.property_id) ?? "Property",
     guestName: guestNameById.get(b.guest_id) ?? null,
+    guestPhone: guestPhoneById.get(b.guest_id) ?? null,
     checkIn: b.check_in,
     checkOut: b.check_out,
     guestsCount: b.guests_count,
