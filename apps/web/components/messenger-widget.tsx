@@ -98,9 +98,15 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
     // directly and synchronously in the effect body trips
     // react-hooks/set-state-in-effect (same pattern as use-current-profile.ts).
     Promise.resolve().then(loadConversations);
+
+    // Only poll the list while looking at the list itself — while a thread
+    // is open, refetching every 45s could reorder/replace the conversation
+    // row out from under the user mid-chat (realtime already keeps the open
+    // thread itself live, so there's nothing this poll would add there).
+    if (activeId) return;
     const interval = setInterval(() => void loadConversations(), 45_000);
     return () => clearInterval(interval);
-  }, [profile, loadConversations]);
+  }, [profile, loadConversations, activeId]);
 
   useEffect(() => {
     if (open) Promise.resolve().then(loadConversations);
@@ -148,7 +154,10 @@ export function MessengerWidget({ locale }: { locale: Locale }) {
             {activeId ? (
               <button
                 type="button"
-                onClick={() => setActiveId(null)}
+                onClick={() => {
+                  setActiveId(null);
+                  void loadConversations();
+                }}
                 className="text-ink-secondary hover:text-ink"
                 aria-label="Back"
               >
