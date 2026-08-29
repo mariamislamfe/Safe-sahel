@@ -170,11 +170,36 @@ export function ChatThread({
     if (!draft.trim()) return;
     setSending(true);
     const supabase = createClient();
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("messages")
-      .insert({ conversation_id: conversationId, sender_id: currentUserId, body: draft.trim() });
+      .insert({ conversation_id: conversationId, sender_id: currentUserId, body: draft.trim() })
+      .select("id, conversation_id, sender_id, body, created_at, read_at")
+      .single();
     setSending(false);
-    if (!error) setDraft("");
+    if (error || !data) return;
+
+    // Add it locally right away instead of waiting on the realtime echo —
+    // on a brand new conversation the channel can still be mid-subscribe
+    // when the first message is sent, so that echo never arrives and the
+    // message silently doesn't show up until a second one is sent (or the
+    // page is refreshed). The INSERT handler above dedupes by id, so this
+    // never double-adds once the echo does arrive.
+    setMessages((prev) =>
+      prev.some((m) => m.id === data.id)
+        ? prev
+        : [
+            ...prev,
+            {
+              id: data.id,
+              conversationId: data.conversation_id,
+              senderId: data.sender_id,
+              body: data.body,
+              createdAt: data.created_at,
+              readAt: data.read_at,
+            },
+          ],
+    );
+    setDraft("");
   }
 
   const statusLabel = useMemo(() => {
