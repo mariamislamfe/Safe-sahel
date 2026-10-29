@@ -38,3 +38,9 @@ Thumbs.db
 # supabase
 supabase/.branches
 supabase/.temp
+
+# Private / local files
+.env*.local
+CLAUDE.md
+AGENTS.md
+.claude/
