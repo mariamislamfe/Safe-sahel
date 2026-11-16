@@ -1,6 +1,11 @@
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 
+/**
+ * Sends a booking REQUEST via request_booking(): status "pending", dates are
+ * only blocked once the owner confirms, and the price is computed in the
+ * database (the price fields below are display-only and ignored).
+ */
 export function useCreateBooking() {
   return useMutation({
     mutationFn: async (input: {
@@ -14,37 +19,23 @@ export function useCreateBooking() {
       depositAmount: number;
       totalAmount: number;
     }) => {
-      const { data: booking, error: bookingError } = await supabase
-        .from("bookings")
-        .insert({
-          property_id: input.propertyId,
-          guest_id: input.guestId,
-          check_in: input.checkIn,
-          check_out: input.checkOut,
-          guests_count: input.guestsCount,
-          nights: input.nights,
-          base_price: input.basePrice,
-          deposit_amount: input.depositAmount,
-          total_amount: input.totalAmount,
-        })
-        .select("id")
-        .single();
-
-      if (bookingError || !booking) throw bookingError ?? new Error("Could not create booking");
-
-      const { error: blockError } = await supabase.from("availability_blocks").insert({
-        property_id: input.propertyId,
-        range: `[${input.checkIn},${input.checkOut})`,
-        reason: "pending_hold",
-        booking_id: booking.id,
+      const { data, error } = await supabase.rpc("request_booking", {
+        p_property_id: input.propertyId,
+        p_check_in: input.checkIn,
+        p_check_out: input.checkOut,
+        p_guests: input.guestsCount,
       });
-
-      if (blockError) {
-        await supabase.from("bookings").delete().eq("id", booking.id);
-        throw new Error("Those dates were just booked by someone else — try different dates.");
+      if (error || !data?.[0]) {
+        const code = error?.message.match(/^([a-z_]+)/)?.[1];
+        throw new Error(
+          code === "dates_unavailable"
+            ? "Those dates are already booked — try different dates."
+            : code === "duplicate_request"
+              ? "You already sent a request for these dates."
+              : (error?.message ?? "Could not send the booking request."),
+        );
       }
-
-      return booking.id as string;
+      return data[0].booking_id;
     },
   });
 }

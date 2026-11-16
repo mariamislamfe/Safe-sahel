@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -25,6 +25,13 @@ export default function SignUpPage() {
   });
 
   const role = watch("role");
+
+  // "Register as a Founding Host" links here with ?role=owner.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("role") === "owner") {
+      Promise.resolve().then(() => setValue("role", "owner"));
+    }
+  }, [setValue]);
 
   async function onSubmit(values: SignUpInput) {
     setServerError(null);

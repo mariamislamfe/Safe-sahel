@@ -5,10 +5,9 @@ import type { Locale } from "@safe-sahel/types";
  * cookie-based locale (see lib/locale.ts), no /en /ar URL segments.
  * Safe to import in both Server and Client Components since it's just data.
  *
- * Scope for this pass: header, footer, home, search shell, property card,
- * property detail, and auth — the surfaces guests actually browse. Owner
- * and admin dashboards stay English-only for now (internal tools, lower
- * priority) — noted so it isn't mistaken for a gap that was missed.
+ * Guest browsing surfaces live here. Booking flow, owner dashboard and
+ * admin dashboard strings live in common.ts / guest.ts / owner.ts /
+ * admin.ts / listing-form.ts alongside this file.
  *
  * Arabic copy is written in everyday Egyptian-inflected Arabic on purpose —
  * not formal fusha, not jokey either.
@@ -41,18 +40,21 @@ export const dictionary = {
     home: {
       kicker: "Safe Sahel",
       title: "Yalla, we're live! Find your stay on the coast now.",
-      lede: "Chalets and villas across Egypt's North Coast, booked directly from owners — no brokers, no endless WhatsApp threads.",
+      lede: "Chalets and villas across Egypt's North Coast, booked directly from verified owners — zero commission.",
       trust: {
-        verifiedTitle: "Verified hosts",
-        verifiedBody: "ID-checked owners get a badge next to their name.",
-        directTitle: "Direct booking",
-        directBody: "Message hosts on-platform — no brokers, no markups.",
-        depositTitle: "Deposit protection",
-        depositBody: "Clear pricing and a documented security deposit.",
+        verifiedTitle: "Verified owners",
+        verifiedBody: "Every owner is checked: National ID + proof of ownership.",
+        directTitle: "Direct with the owner",
+        directBody: "Send a request; once the owner confirms, you talk on WhatsApp. No commission.",
+        depositTitle: "Clear deposit terms",
+        depositBody: "Clear deposit terms + a check-in condition checklist you both confirm.",
       },
       exploreStays: "Explore stays",
       exploreByLocation: "Explore by location",
-      exploreByLocationSubtitle: "Compounds across the North Coast",
+      exploreByLocationSubtitle: "Starting with our focus compounds",
+      comingSoon: "Coming soon",
+      staysCount: (n: number) => `${n} ${n === 1 ? "stay" : "stays"}`,
+      featuredTitle: "Featured stays",
       newOnSafeSahel: "New on Safe Sahel",
       topRated: "Top rated stays",
       topRatedSubtitle: "Loved by past guests",
@@ -60,10 +62,18 @@ export const dictionary = {
       noStaysBody: "Once owners publish properties, they'll show up here.",
       listFirst: "List the first property →",
       ctaTitle: "Got a place on the coast?",
-      ctaBody: "List it on Safe Sahel and start attracting guests directly — no broker fees, full control over your calendar.",
-      ctaButton: "List your property",
-      limitedOffer: "Limited-time offer",
-      perMonth: "/ month",
+      ctaBody:
+        "List it on Safe Sahel and get booking requests directly — zero commission, full control over your calendar.",
+      ctaButton: "Register as a Founding Host",
+      founderBadge: "Founding Host offer",
+      founderOffer: "Completely free until April. Register now and get Founding Host perks.",
+      founderPerks: [
+        "Launch prices locked for 2 years",
+        "First month of Featured free",
+        "Founding Host badge",
+      ],
+      guarantee:
+        "If you don't get a single booking request in the first 30 days of a Season plan, next month is on us.",
       seeAll: "See all →",
       categories: {
         villa: "Villas",
@@ -101,11 +111,11 @@ export const dictionary = {
       bathrooms: "bathrooms",
       guests: "guests",
       aboutTitle: "About this place",
-      protectionTitle: "Safe Sahel protects you",
+      protectionTitle: "Why book through Safe Sahel",
       protectionItems: [
-        "Every host is ID-verified before they can list — look for the verified badge.",
-        "Message the host on-platform. Your phone number stays private until you're ready to share it.",
-        "Bookings run through a documented deposit, so there's a paper trail if anything goes wrong.",
+        "Every owner is verified with their National ID and proof of ownership — look for the Verified Owner badge.",
+        "Send a booking request. Once the owner confirms, you get their WhatsApp and their legal name to check against InstaPay.",
+        "Clear deposit terms and a check-in condition checklist that you and the owner both confirm. Safe Sahel never holds your money.",
       ],
       checkInTitle: "Check-in",
       villageEntryTitle: "Getting into the compound",
@@ -147,21 +157,22 @@ export const dictionary = {
         {
           question: "How does the deposit work?",
           answer:
-            "You pay a deposit to hold the dates — the host confirms your booking manually, and the remaining balance is settled directly with them, the same way it's always worked on the coast.",
+            "You pay the deposit and rent directly to the owner by InstaPay or cash — Safe Sahel never holds money. Only transfer after the owner confirms, and only if the InstaPay recipient name matches the legal name we show you.",
         },
         {
-          question: "Can I message the host before booking?",
+          question: "Can I talk to the owner before booking?",
           answer:
-            "Yes — use the message button on this page. Everything stays inside Safe Sahel, so you're not handing out your number to a stranger.",
+            "Send a booking request and put any questions in the note. Once the owner confirms, a WhatsApp button appears so you can talk directly.",
         },
         {
-          question: "What happens if the host declines my booking?",
-          answer: "Your deposit hold is released and you're free to book another place, no questions asked.",
-        },
-        {
-          question: "Is this place actually verified?",
+          question: "What if the owner declines or doesn't reply?",
           answer:
-            "The verified badge means our team checked the host's ID and confirmed they can list on the platform — it's not a guarantee of the property itself, so always check photos and reviews too.",
+            "Nothing was paid through us, so there's nothing to refund — just request another place. Requests with no reply expire after 24 hours, and your dates are never marked as booked until the owner confirms.",
+        },
+        {
+          question: "What does “Verified Owner” mean?",
+          answer:
+            "Our team checked the owner's National ID and proof of ownership (compound card or maintenance bill). It isn't a guarantee of the stay itself — check photos and reviews too.",
         },
       ],
       reviewsTitle: "Reviews",
@@ -180,7 +191,8 @@ export const dictionary = {
     budgetPlanner: {
       fabLabel: "Plan by budget",
       title: "What can I book with this?",
-      intro: "Tell us your budget and we'll show you real stays you can afford — and how many nights.",
+      intro:
+        "Tell us your budget and we'll show you real stays you can afford — and how many nights.",
       inputLabel: "Your budget (EGP)",
       submit: "Find stays",
       loading: "Searching…",
@@ -218,18 +230,21 @@ export const dictionary = {
     home: {
       kicker: "سيف الساحل",
       title: "يلا، اطلقنا رسميًا! اعثر على إقامتك في الساحل دلوقتي.",
-      lede: "شاليهات وفيلات في كل الساحل الشمالي، بالحجز المباشر من صاحب العقار — من غير سماسرة ومن غير رسايل واتساب ملهاش آخر.",
+      lede: "شاليهات وفيلات في كل الساحل الشمالي، بالحجز المباشر من ملاك موثّقين — من غير أي عمولة.",
       trust: {
-        verifiedTitle: "ملاك موثّقون",
-        verifiedBody: "المُلّاك اللي بيوثّقوا بياناتهم بتظهر علامة جنب اسمهم.",
-        directTitle: "حجز مباشر",
-        directBody: "كلّم صاحب العقار من جوه المنصة — من غير سمسار ومن غير زيادة في السعر.",
-        depositTitle: "حماية العربون",
-        depositBody: "أسعار واضحة، وعربون موثّق ومسجّل.",
+        verifiedTitle: "ملاك موثّقين",
+        verifiedBody: "كل مالك بيتوثّق ببطاقته الشخصية وإثبات ملكية.",
+        directTitle: "مباشرة مع المالك",
+        directBody: "ابعت طلب حجز، وبعد ما المالك يأكد بتكلمه على واتساب. من غير عمولة.",
+        depositTitle: "شروط عربون واضحة",
+        depositBody: "شروط عربون واضحة + قائمة فحص حالة المكان وقت الاستلام بتأكدوها انتو الاتنين.",
       },
       exploreStays: "استكشف الإقامات",
       exploreByLocation: "استكشف حسب المكان",
-      exploreByLocationSubtitle: "كمباوندات في كل الساحل الشمالي",
+      exploreByLocationSubtitle: "بنبدأ بالكمباوندات اللي مركزين عليها",
+      comingSoon: "قريباً",
+      staysCount: (n: number) => `${n} ${n === 1 ? "إقامة" : "إقامات"}`,
+      featuredTitle: "إقامات مميزة",
       newOnSafeSahel: "جديد على سيف الساحل",
       topRated: "الأعلى تقييمًا",
       topRatedSubtitle: "اللي عجبت اللي جربوها",
@@ -237,10 +252,17 @@ export const dictionary = {
       noStaysBody: "أول ما الملاك ينشروا عقاراتهم، هتلاقيهم هنا.",
       listFirst: "أضف أول عقار ←",
       ctaTitle: "عندك مكان في الساحل؟",
-      ctaBody: "اعرضه معانا على سيف الساحل وابدأ تجذب ضيوف مباشرة — من غير عمولة سمسار، والتحكم كله في إيدك.",
-      ctaButton: "أضف عقارك",
-      limitedOffer: "عرض لفترة محدودة",
-      perMonth: "/ شهريًا",
+      ctaBody:
+        "اعرضه على سيف الساحل وتوصلك طلبات الحجز مباشرة — من غير أي عمولة، والكالندر في إيدك.",
+      ctaButton: "سجّل كمالك مؤسس",
+      founderBadge: "عرض المالك المؤسس",
+      founderOffer: "مجاناً تماماً لحد أبريل. سجّل دلوقتي واحصل على مميزات المالك المؤسس",
+      founderPerks: [
+        "أسعار الإطلاق ثابتة لمدة سنتين",
+        "أول شهر تمييز (Featured) مجاناً",
+        "شارة المالك المؤسس",
+      ],
+      guarantee: "لو ما جالكش ولا طلب حجز في أول 30 يوم من باقة الموسم، الشهر الجاي علينا",
       seeAll: "شوف الكل ←",
       categories: {
         villa: "فيلات",
@@ -278,11 +300,11 @@ export const dictionary = {
       bathrooms: "حمامات",
       guests: "ضيوف",
       aboutTitle: "عن المكان",
-      protectionTitle: "سيف الساحل بيحميك",
+      protectionTitle: "ليه تحجز من سيف الساحل",
       protectionItems: [
-        "كل صاحب عقار بيتوثّق قبل ما ينشر — دور على علامة التوثيق.",
-        "كلّم صاحب العقار من جوه المنصة، ورقم تليفونك يفضل خاص لحد ما تحدد إنت.",
-        "الحجز بيتم بعربون موثّق ومسجّل، فلو حصل أي مشكلة يبقى في إثبات.",
+        "كل مالك بيتوثّق ببطاقته الشخصية وإثبات ملكية — دوّر على شارة «مالك موثّق».",
+        "ابعت طلب حجز. بعد ما المالك يأكد، هيظهرلك رقم الواتساب بتاعه واسمه القانوني عشان تطابقه مع InstaPay.",
+        "شروط عربون واضحة وقائمة فحص لحالة المكان وقت الاستلام بتأكدوها انت والمالك. سيف الساحل عمرها ما بتمسك فلوسك.",
       ],
       checkInTitle: "الوصول والتسليم",
       villageEntryTitle: "الدخول للكمباوند",
@@ -324,21 +346,22 @@ export const dictionary = {
         {
           question: "العربون بيشتغل ازاي؟",
           answer:
-            "بتدفع عربون عشان تحجز التواريخ، وصاحب العقار بيأكد الحجز بنفسه، وباقي المبلغ بتتفقوا عليه مباشرة زي ما اتعودنا في الساحل.",
+            "العربون والإيجار بيتدفعوا للمالك مباشرة بـ InstaPay أو كاش — سيف الساحل مبتمسكش فلوس. حوّل بس بعد ما المالك يأكد، وبس لو اسم المستلم في InstaPay هو نفس الاسم القانوني اللي بنوريهولك.",
         },
         {
-          question: "أقدر أكلم صاحب العقار قبل ما أحجز؟",
+          question: "أقدر أكلم المالك قبل ما أحجز؟",
           answer:
-            "أيوة، من زرار المراسلة اللي في الصفحة دي. كل الكلام بيفضل جوه سيف الساحل، فمش لازم تدي رقمك لحد متعرفوش.",
+            "ابعت طلب حجز واكتب أسئلتك في الملاحظات. أول ما المالك يأكد، هيظهرلك زرار واتساب تكلمه منه على طول.",
         },
         {
-          question: "لو صاحب العقار رفض الحجز، هيحصل ايه؟",
-          answer: "العربون بيتفك على طول وتقدر تحجز مكان تاني من غير أي مشكلة.",
-        },
-        {
-          question: "المكان دا موثّق فعلاً؟",
+          question: "لو المالك رفض أو مردّش؟",
           answer:
-            "علامة التوثيق معناها إن فريقنا اتأكد من بطاقة صاحب العقار وإنه له حق ينشر عندنا — مش ضمان للعقار نفسه، فيفضل تتأكد من الصور والتقييمات كمان.",
+            "مفيش فلوس اتدفعت عن طريقنا، فمفيش حاجة تترجع — ابعت طلب لمكان تاني. الطلبات اللي محدش رد عليها بتنتهي بعد ٢٤ ساعة، والتواريخ مبتتحجزش غير لما المالك يأكد.",
+        },
+        {
+          question: "يعني ايه «مالك موثّق»؟",
+          answer:
+            "فريقنا اتأكد من بطاقة المالك الشخصية وإثبات الملكية (كارنيه الكمباوند أو إيصال الصيانة). ده مش ضمان للإقامة نفسها — اتأكد من الصور والتقييمات كمان.",
         },
       ],
       reviewsTitle: "التقييمات",

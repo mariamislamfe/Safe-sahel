@@ -30,7 +30,11 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/");
+    // Only same-site paths — never an open redirect.
+    const redirect = new URLSearchParams(window.location.search).get("redirect");
+    router.push(
+      redirect && redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "/",
+    );
     router.refresh();
   }
 

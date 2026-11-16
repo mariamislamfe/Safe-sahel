@@ -48,10 +48,17 @@ export const propertyFormSchema = z
     smokingAllowed: z.boolean(),
     commercialPhotographyAllowed: z.boolean(),
     cancellationPolicy: z.enum(cancellationPolicyOptions),
+    unitAddress: z.string().trim().max(120).optional(),
+    monthlyRentalEnabled: z.boolean(),
+    monthlyPrice: z.union([z.coerce.number().positive(), z.nan()]).optional(),
   })
   .refine((data) => !data.dayUseEnabled || (data.dayUsePrice && !Number.isNaN(data.dayUsePrice)), {
     message: "Set a day-use price",
     path: ["dayUsePrice"],
-  });
+  })
+  .refine(
+    (data) => !data.monthlyRentalEnabled || (data.monthlyPrice && !Number.isNaN(data.monthlyPrice)),
+    { message: "Set a monthly price", path: ["monthlyPrice"] },
+  );
 
 export type PropertyFormInput = z.infer<typeof propertyFormSchema>;

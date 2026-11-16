@@ -3,6 +3,8 @@ import { Plus_Jakarta_Sans, Inter, Tajawal } from "next/font/google";
 import { getLocale } from "@/lib/locale";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { SiteVisitTracker } from "@/components/tracking";
+import { LocaleProvider } from "@/lib/i18n/locale-provider";
 import "./globals.css";
 
 const display = Plus_Jakarta_Sans({
@@ -40,9 +42,12 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${display.variable} ${body.variable} ${arabic.variable}`}
     >
       <body className="flex min-h-screen flex-col">
-        <SiteHeader locale={locale} />
-        <div className="flex-1 pt-16">{children}</div>
-        <SiteFooter locale={locale} />
+        <LocaleProvider locale={locale}>
+          <SiteVisitTracker />
+          <SiteHeader locale={locale} />
+          <div className="flex-1 pt-16">{children}</div>
+          <SiteFooter locale={locale} />
+        </LocaleProvider>
       </body>
     </html>
   );

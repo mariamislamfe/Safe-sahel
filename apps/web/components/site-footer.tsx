@@ -19,7 +19,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
       title: t.hosting,
       links: [
         { href: "/owner", label: locale === "ar" ? "أضف عقارك" : "List your property" },
-        { href: "/profile/verify", label: t.getVerified },
+        { href: "/owner/verification", label: t.getVerified },
       ],
     },
     {
@@ -27,6 +27,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
       links: [
         { href: "https://wa.me/201123094983", label: "WhatsApp: 01123094983", external: true },
         { href: "/profile", label: t.account },
+        { href: "/privacy", label: locale === "ar" ? "سياسة الخصوصية" : "Privacy policy" },
       ],
     },
   ];

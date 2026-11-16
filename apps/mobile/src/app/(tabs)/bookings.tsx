@@ -7,7 +7,9 @@ import { SignInPrompt } from "@/components/sign-in-prompt";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 const statusLabel: Record<string, string> = {
-  pending_payment: "Awaiting host",
+  pending: "Waiting for owner to confirm",
+  pending_payment: "Waiting for owner to confirm",
+  expired: "Expired (no reply in 24h)",
   confirmed: "Confirmed",
   declined: "Declined",
   cancelled: "Cancelled",

@@ -6,7 +6,6 @@ import {
   getOwnerPropertyById,
   getPropertyAmenityIds,
 } from "@/lib/queries/owner";
-import { getSubscriptionPriceEgp } from "@/lib/queries/availability";
 import { PropertyForm } from "@/components/property-form";
 
 export default async function EditPropertyPage(props: PageProps<"/owner/properties/[id]/edit">) {
@@ -17,11 +16,10 @@ export default async function EditPropertyPage(props: PageProps<"/owner/properti
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const [property, compounds, amenities, subscriptionPriceEgp] = await Promise.all([
+  const [property, compounds, amenities] = await Promise.all([
     getOwnerPropertyById(id, user.id),
     getCompoundOptions(),
     getAmenityOptions(),
-    getSubscriptionPriceEgp(),
   ]);
 
   if (!property) notFound();
@@ -37,7 +35,6 @@ export default async function EditPropertyPage(props: PageProps<"/owner/properti
         amenities={amenities}
         existing={property}
         existingAmenityIds={amenityIds}
-        subscriptionPriceEgp={subscriptionPriceEgp}
       />
     </div>
   );

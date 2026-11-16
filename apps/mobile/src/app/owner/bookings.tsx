@@ -22,7 +22,7 @@ export default function OwnerBookingsScreen() {
               {item.guestName ?? "Guest"} · {item.checkIn} → {item.checkOut}
             </Text>
             <Text className="text-sm font-medium text-ink">{formatEgp(item.totalAmount)}</Text>
-            {item.status === "pending_payment" ? (
+            {item.status === "pending" || item.status === "pending_payment" ? (
               <View className="flex-row gap-sm">
                 <Pressable
                   onPress={() => respond.mutate({ bookingId: item.id, decision: "confirmed" })}

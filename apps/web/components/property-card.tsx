@@ -1,8 +1,13 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
-import { formatEgp } from "@safe-sahel/utils";
 import type { PropertyListItem } from "@/lib/queries/properties";
 import { FavoriteButton } from "@/components/favorite-button";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { getDictionary } from "@/lib/i18n/dictionary";
+import { common } from "@/lib/i18n/common";
+import { money } from "@/lib/i18n/format";
 
 export type DisplayProperty = {
   id: string;
@@ -17,6 +22,9 @@ export type DisplayProperty = {
   pricePerNight: number;
   dayUseAvailable: boolean;
   verified: boolean;
+  hostType: "owner" | "broker" | null;
+  founding: boolean;
+  monthlyRental: boolean;
   featured: boolean;
   amenities: string[];
   latitude: number | null;
@@ -36,7 +44,10 @@ export function fromRealProperty(p: PropertyListItem): DisplayProperty {
     bedrooms: p.bedrooms,
     pricePerNight: p.pricePerNight,
     dayUseAvailable: p.dayUseEnabled,
-    verified: p.verified,
+    verified: p.host.verified,
+    hostType: p.host.hostType,
+    founding: p.host.founding,
+    monthlyRental: p.monthlyRentalEnabled,
     featured: p.featured,
     amenities: p.amenityPreview,
     latitude: p.latitude,
@@ -51,6 +62,9 @@ export function PropertyCard({
   property: DisplayProperty;
   priority?: boolean;
 }) {
+  const locale = useLocale();
+  const t = getDictionary(locale).property;
+  const badges = common[locale].badges;
   return (
     <Link
       href={`/properties/${property.slug}`}
@@ -68,7 +82,7 @@ export function PropertyCard({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-xs text-ink-secondary">
-            No photo yet
+            {t.noPhoto}
           </div>
         )}
 
@@ -76,17 +90,22 @@ export function PropertyCard({
           <div className="flex flex-wrap gap-xs">
             {property.featured && (
               <span className="rounded-full bg-turquoise px-sm py-[3px] text-[11px] font-semibold text-white shadow-sm">
-                Featured
+                {t.featured}
               </span>
             )}
             {property.verified && (
               <span className="rounded-full bg-butter px-sm py-[3px] text-[11px] font-semibold text-ink shadow-sm">
-                Verified
+                {property.hostType === "broker" ? badges.approvedBroker : badges.verifiedOwner}
               </span>
             )}
             {property.dayUseAvailable && (
               <span className="rounded-full bg-surface/95 px-sm py-[3px] text-[11px] font-semibold text-turquoise-dark shadow-sm">
-                Day use
+                {t.dayUse}
+              </span>
+            )}
+            {property.founding && (
+              <span className="rounded-full bg-ink/80 px-sm py-[3px] text-[11px] font-semibold text-butter shadow-sm">
+                {badges.foundingHost}
               </span>
             )}
           </div>
@@ -112,12 +131,13 @@ export function PropertyCard({
           <p className="line-clamp-1 text-[13px] text-ink-secondary">{property.compoundName}</p>
         )}
         <p className="text-[13px] text-ink-secondary">
-          {property.maxGuests} guests · {property.bedrooms} bed{property.bedrooms === 1 ? "" : "s"}
+          {property.maxGuests} {t.guests} · {property.bedrooms}{" "}
+          {property.bedrooms === 1 ? t.bed : t.beds}
         </p>
         <p className="mt-1 text-[15px] text-ink">
-          <span className="text-ink-secondary">From</span>{" "}
-          <span className="font-semibold">{formatEgp(property.pricePerNight)}</span>{" "}
-          <span className="text-ink-secondary">/ night</span>
+          <span className="text-ink-secondary">{t.from}</span>{" "}
+          <span className="font-semibold">{money(locale, property.pricePerNight)}</span>{" "}
+          <span className="text-ink-secondary">{t.perNight}</span>
         </p>
       </div>
     </Link>

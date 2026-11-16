@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { OwnerShell } from "@/components/owner-shell";
+import { getOwnerPendingCount } from "@/lib/queries/owner-dashboard";
 
 export default async function OwnerLayout({ children }: LayoutProps<"/owner">) {
   const supabase = await createClient();
@@ -8,7 +9,9 @@ export default async function OwnerLayout({ children }: LayoutProps<"/owner">) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?redirect=/owner");
 
-  return <OwnerShell>{children}</OwnerShell>;
+  const pendingCount = await getOwnerPendingCount(user.id).catch(() => 0);
+
+  return <OwnerShell pendingCount={pendingCount}>{children}</OwnerShell>;
 }

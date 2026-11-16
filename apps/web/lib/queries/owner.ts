@@ -83,6 +83,9 @@ export type OwnerPropertyFull = {
   smokingAllowed: boolean;
   commercialPhotographyAllowed: boolean;
   cancellationPolicy: CancellationPolicyEnum;
+  unitAddress: string | null;
+  monthlyRentalEnabled: boolean;
+  monthlyPrice: number | null;
 };
 
 export async function getOwnerPropertyById(
@@ -134,12 +137,19 @@ export async function getOwnerPropertyById(
     smokingAllowed: property.smoking_allowed,
     commercialPhotographyAllowed: property.commercial_photography_allowed,
     cancellationPolicy: property.cancellation_policy,
+    unitAddress: property.unit_address,
+    monthlyRentalEnabled: property.monthly_rental_enabled,
+    monthlyPrice: property.monthly_price !== null ? Number(property.monthly_price) : null,
   };
 }
 
 export async function getCompoundOptions(): Promise<{ id: string; name: string }[]> {
   const supabase = await createClient();
-  const { data } = await supabase.from("compounds").select("id, name").order("name");
+  const { data } = await supabase
+    .from("compounds")
+    .select("id, name")
+    .eq("hidden", false)
+    .order("name");
   return data ?? [];
 }
 

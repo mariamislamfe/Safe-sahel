@@ -1,26 +1,15 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-
-const tabs = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/properties", label: "Properties" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/bookings", label: "Bookings" },
-  { href: "/admin/verification", label: "Verification" },
-  { href: "/admin/handovers", label: "Handovers" },
-  { href: "/admin/subscription-codes", label: "Subscription codes" },
-  { href: "/admin/compounds", label: "Compounds" },
-  { href: "/admin/amenities", label: "Amenities" },
-  { href: "/admin/settings", label: "Settings" },
-];
+import { getLocale } from "@/lib/locale";
+import { adminDict } from "@/lib/i18n/admin";
+import { AdminNav } from "@/components/admin-nav";
 
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?redirect=/admin");
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -29,19 +18,36 @@ export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
     .single();
   if (profile?.role !== "admin") redirect("/");
 
+  const t = adminDict[await getLocale()].nav;
+  const groups = [
+    [
+      { href: "/admin", label: t.overview },
+      { href: "/admin/verification", label: t.verification },
+      { href: "/admin/payments", label: t.payments },
+      { href: "/admin/subscriptions", label: t.subscriptions },
+      { href: "/admin/properties", label: t.listings },
+      { href: "/admin/guarantee", label: t.guarantee },
+      { href: "/admin/featured", label: t.featured },
+    ],
+    [
+      { href: "/admin/kpis", label: t.kpis },
+      { href: "/admin/targets", label: t.targets },
+      { href: "/admin/finance", label: t.finance },
+      { href: "/admin/access-log", label: t.accessLog },
+    ],
+    [
+      { href: "/admin/bookings", label: t.bookings },
+      { href: "/admin/users", label: t.users },
+      { href: "/admin/compounds", label: t.compounds },
+      { href: "/admin/amenities", label: t.amenities },
+      { href: "/admin/handovers", label: t.handovers },
+      { href: "/admin/settings", label: t.settings },
+    ],
+  ];
+
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-xl px-lg py-2xl">
-      <nav className="flex flex-wrap gap-md border-b border-border">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className="border-b-2 border-transparent px-xs pb-md text-sm font-medium text-ink-secondary hover:border-turquoise hover:text-ink"
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+    <div className="mx-auto flex max-w-6xl flex-col gap-xl px-lg py-xl sm:py-2xl">
+      <AdminNav groups={groups} />
       {children}
     </div>
   );

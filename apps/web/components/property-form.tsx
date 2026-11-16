@@ -11,10 +11,15 @@ import {
   cancellationPolicyOptions,
   type PropertyFormInput,
 } from "@safe-sahel/validation";
-import { formatEgp } from "@safe-sahel/utils";
+import { parsePublishBlockers, rpcErrorCode } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { OwnerPropertyFull } from "@/lib/queries/owner";
-import { SubscriptionGate } from "@/components/subscription-gate";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { listingFormDict } from "@/lib/i18n/listing-form";
+import { blockerTexts, common, errorText } from "@/lib/i18n/common";
+import { getDictionary } from "@/lib/i18n/dictionary";
+import { guestDict } from "@/lib/i18n/guest";
+import { money } from "@/lib/i18n/format";
 
 type Props = {
   ownerId: string;
@@ -22,7 +27,6 @@ type Props = {
   amenities: { id: string; name: string; category: string | null }[];
   existing?: OwnerPropertyFull;
   existingAmenityIds?: string[];
-  subscriptionPriceEgp: number;
 };
 
 function slugify(title: string) {
@@ -41,12 +45,16 @@ export function PropertyForm({
   amenities,
   existing,
   existingAmenityIds = [],
-  subscriptionPriceEgp,
 }: Props) {
   const router = useRouter();
+  const locale = useLocale();
+  const t = listingFormDict[locale];
+  const c = common[locale];
+  const policies = getDictionary(locale).propertyDetail.cancellationPolicies;
+  const viewLabels = guestDict[locale].listing.viewTypes;
+
   const [serverError, setServerError] = useState<string | null>(null);
-  const [needsSubscription, setNeedsSubscription] = useState(false);
-  const [pendingPropertyId, setPendingPropertyId] = useState<string | null>(null);
+  const [publishBlockers, setPublishBlockers] = useState<string[]>([]);
   const [compoundOptions, setCompoundOptions] = useState(compounds);
   const [addingCompound, setAddingCompound] = useState(false);
   const [newCompoundName, setNewCompoundName] = useState("");
@@ -93,6 +101,9 @@ export function PropertyForm({
           smokingAllowed: existing.smokingAllowed,
           commercialPhotographyAllowed: existing.commercialPhotographyAllowed,
           cancellationPolicy: existing.cancellationPolicy,
+          unitAddress: existing.unitAddress ?? "",
+          monthlyRentalEnabled: existing.monthlyRentalEnabled,
+          monthlyPrice: existing.monthlyPrice ?? undefined,
         }
       : {
           type: "chalet",
@@ -113,10 +124,13 @@ export function PropertyForm({
           smokingAllowed: false,
           commercialPhotographyAllowed: false,
           cancellationPolicy: "moderate",
+          unitAddress: "",
+          monthlyRentalEnabled: false,
         },
   });
 
   const dayUseEnabled = watch("dayUseEnabled");
+  const monthlyRentalEnabled = watch("monthlyRentalEnabled");
   const amenityIds = watch("amenityIds");
   const beachAccess = watch("beachAccess");
   const watchedType = watch("type");
@@ -167,7 +181,8 @@ export function PropertyForm({
 
     let coverImageUrl: string | null = null;
     if (newCompoundPhoto) {
-      const path = `${ownerId}/${Date.now()}-${newCompoundPhoto.name}`;
+      const ext = newCompoundPhoto.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${ownerId}/${crypto.randomUUID()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("compound-images")
         .upload(path, newCompoundPhoto);
@@ -184,7 +199,7 @@ export function PropertyForm({
       .insert({
         name: newCompoundName.trim(),
         area: newCompoundArea.trim() || null,
-        slug: slugify(newCompoundName),
+        slug: `${slugify(newCompoundName)}-${Date.now().toString(36)}`,
         cover_image_url: coverImageUrl,
       })
       .select("id, name")
@@ -192,7 +207,7 @@ export function PropertyForm({
 
     setAddingCompoundBusy(false);
     if (error || !data) {
-      setCompoundError(error?.message ?? "Could not add compound");
+      setCompoundError(error?.message ?? c.errors.generic!);
       return;
     }
 
@@ -211,13 +226,11 @@ export function PropertyForm({
     );
   }
 
-  function isSubscriptionError(message: string) {
-    return message.includes("published_requires_active_subscription");
-  }
+  const num = (v: number | undefined) => (v === undefined || Number.isNaN(v) ? null : v);
 
   async function onSubmit(values: PropertyFormInput) {
     setServerError(null);
-    setNeedsSubscription(false);
+    setPublishBlockers([]);
     const supabase = createClient();
 
     const basePayload = {
@@ -230,18 +243,17 @@ export function PropertyForm({
       bedrooms: values.bedrooms,
       bathrooms: values.bathrooms,
       max_guests: values.maxGuests,
-      floor: Number.isNaN(values.floor) ? null : (values.floor ?? null),
+      floor: num(values.floor),
       parking: values.parking,
       beach_access: values.beachAccess,
       pool_access: values.poolAccess,
       view_type: values.viewType,
       price_per_night: values.pricePerNight,
       day_use_enabled: values.dayUseEnabled,
-      day_use_price:
-        values.dayUseEnabled && !Number.isNaN(values.dayUsePrice) ? values.dayUsePrice : null,
+      day_use_price: values.dayUseEnabled ? num(values.dayUsePrice) : null,
       min_stay_nights: values.minStayNights,
-      size_sqm: Number.isNaN(values.sizeSqm) ? null : (values.sizeSqm ?? null),
-      beds: Number.isNaN(values.beds) ? null : (values.beds ?? null),
+      size_sqm: num(values.sizeSqm),
+      beds: num(values.beds),
       check_in_instructions: values.checkInInstructions || null,
       village_entry_requirements: values.villageEntryRequirements || null,
       beach_access_details: values.beachAccessDetails || null,
@@ -250,55 +262,38 @@ export function PropertyForm({
       smoking_allowed: values.smokingAllowed,
       commercial_photography_allowed: values.commercialPhotographyAllowed,
       cancellation_policy: values.cancellationPolicy,
+      unit_address: values.unitAddress?.trim() || null,
+      monthly_rental_enabled: values.monthlyRentalEnabled,
+      monthly_price: values.monthlyRentalEnabled ? num(values.monthlyPrice) : null,
     };
 
     let propertyId = existing?.id;
-    let blockedOnSubscription = false;
 
+    // Always save the details as a draft-or-current status first, then try to
+    // publish separately — so a publish blocker never loses the owner's edits.
     if (propertyId) {
       const { error } = await supabase
         .from("properties")
-        .update({ ...basePayload, status: values.status })
+        .update({
+          ...basePayload,
+          status: existing?.status === "published" ? "published" : "draft",
+        })
         .eq("id", propertyId);
       if (error) {
-        if (isSubscriptionError(error.message)) {
-          setPendingPropertyId(propertyId);
-          setNeedsSubscription(true);
-          blockedOnSubscription = true;
-        } else {
-          setServerError(error.message);
-          return;
-        }
+        const blockers = parsePublishBlockers(error.message);
+        if (blockers.length) setPublishBlockers(blockers);
+        else return setServerError(errorText(locale, rpcErrorCode(error.message)));
       }
     } else {
-      // New properties are always created as drafts first — publishing
-      // needs a property id to attach a subscription to (see
-      // SubscriptionGate below), which doesn't exist until after this insert.
       const { data, error } = await supabase
         .from("properties")
         .insert({ ...basePayload, status: "draft" })
         .select("id")
         .single();
-      if (error || !data) {
-        setServerError(error?.message ?? "Could not create property");
-        return;
-      }
+      if (error || !data) return setServerError(errorText(locale, rpcErrorCode(error?.message)));
       propertyId = data.id;
-
-      if (values.status === "published") {
-        const { error: publishError } = await supabase
-          .from("properties")
-          .update({ status: "published" })
-          .eq("id", propertyId);
-        if (publishError && isSubscriptionError(publishError.message)) {
-          setPendingPropertyId(propertyId);
-          setNeedsSubscription(true);
-          blockedOnSubscription = true;
-        }
-      }
     }
 
-    // Replace the amenity set wholesale — simplest correct approach for a small list.
     await supabase.from("property_amenities").delete().eq("property_id", propertyId);
     if (values.amenityIds.length > 0) {
       await supabase
@@ -306,50 +301,55 @@ export function PropertyForm({
         .insert(values.amenityIds.map((amenity_id) => ({ property_id: propertyId!, amenity_id })));
     }
 
-    if (blockedOnSubscription) {
-      // Stay put — the property was saved (as a draft), but the gate below
-      // needs to be resolved before it can actually go live.
-      return;
+    const wantsPublished = values.status === "published";
+    const isPublished = existing?.status === "published";
+    if (wantsPublished !== isPublished) {
+      const { error } = await supabase
+        .from("properties")
+        .update({ status: wantsPublished ? "published" : "draft" })
+        .eq("id", propertyId);
+      if (error) {
+        const blockers = parsePublishBlockers(error.message);
+        if (blockers.length) {
+          setPublishBlockers(blockers);
+          if (!existing) router.replace(`/owner/properties/${propertyId}/edit`);
+          return;
+        }
+        return setServerError(errorText(locale, rpcErrorCode(error.message)));
+      }
     }
 
-    router.push(`/owner/properties/${propertyId}/edit`);
-    router.refresh();
-  }
-
-  async function handleSubscriptionActivated() {
-    if (!pendingPropertyId) return;
-    const supabase = createClient();
-    await supabase.from("properties").update({ status: "published" }).eq("id", pendingPropertyId);
-    setNeedsSubscription(false);
-    router.push(`/owner/properties/${pendingPropertyId}/edit`);
+    router.push(
+      existing ? `/owner/properties/${propertyId}/edit` : `/owner/properties/${propertyId}/photos`,
+    );
     router.refresh();
   }
 
   const amenitiesByCategory = amenities.reduce<Record<string, typeof amenities>>((acc, a) => {
-    const key = a.category ?? "other";
-    (acc[key] ??= []).push(a);
+    (acc[a.category ?? "other"] ??= []).push(a);
     return acc;
   }, {});
+  const typeLabel = c.propertyTypes[watchedType] ?? watchedType;
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-xl">
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">Basics</h2>
-        <Field label="Title" error={errors.title?.message}>
-          <input {...register("title")} className={inputClass} placeholder="Chalet Zaha" />
+        <h2 className="font-display text-lg font-semibold">{t.basics}</h2>
+        <Field label={t.title} error={errors.title && t.errTitle}>
+          <input {...register("title")} className={inputClass} placeholder={t.titlePlaceholder} />
         </Field>
 
-        <div className="grid grid-cols-2 gap-md">
-          <Field label="Type">
+        <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+          <Field label={t.type}>
             <select {...register("type")} className={inputClass}>
-              {propertyTypeOptions.map((t) => (
-                <option key={t} value={t}>
-                  {t.replace("_", " ")}
+              {propertyTypeOptions.map((o) => (
+                <option key={o} value={o}>
+                  {c.propertyTypes[o] ?? o}
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Compound">
+          <Field label={t.compound}>
             <select
               {...register("compoundId")}
               className={inputClass}
@@ -361,38 +361,36 @@ export function PropertyForm({
                 setValue("compoundId", e.target.value || null);
               }}
             >
-              <option value="">None</option>
-              {compoundOptions.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
+              <option value="">{t.none}</option>
+              {compoundOptions.map((co) => (
+                <option key={co.id} value={co.id}>
+                  {co.name}
                 </option>
               ))}
-              <option value="__new__">+ Add a new compound…</option>
+              <option value="__new__">{t.addCompound}</option>
             </select>
           </Field>
         </div>
 
         {addingCompound && (
           <div className="flex flex-col gap-sm rounded-md border border-dashed border-turquoise bg-turquoise-light p-md">
-            <p className="text-sm font-medium text-ink">New compound</p>
-            <div className="grid grid-cols-2 gap-sm">
+            <p className="text-sm font-medium text-ink">{t.newCompound}</p>
+            <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
               <input
                 value={newCompoundName}
                 onChange={(e) => setNewCompoundName(e.target.value)}
-                placeholder="Compound name"
+                placeholder={t.compoundName}
                 className={inputClass}
               />
               <input
                 value={newCompoundArea}
                 onChange={(e) => setNewCompoundArea(e.target.value)}
-                placeholder="Area (optional)"
+                placeholder={t.area}
                 className={inputClass}
               />
             </div>
             <label className="flex flex-col gap-xs">
-              <span className="text-xs font-medium text-ink-secondary">
-                Cover photo, optional (e.g. a photo of the compound entrance)
-              </span>
+              <span className="text-xs font-medium text-ink-secondary">{t.compoundPhoto}</span>
               <input
                 type="file"
                 accept="image/*"
@@ -408,95 +406,99 @@ export function PropertyForm({
                 disabled={addingCompoundBusy}
                 className="rounded-md bg-turquoise px-md py-xs text-sm font-medium text-white hover:bg-turquoise-dark disabled:opacity-60"
               >
-                {addingCompoundBusy ? "Adding…" : "Add compound"}
+                {addingCompoundBusy ? t.adding : t.addCompoundBtn}
               </button>
               <button
                 type="button"
                 onClick={() => setAddingCompound(false)}
                 className="text-sm text-ink-secondary hover:text-ink"
               >
-                Cancel
+                {t.cancel}
               </button>
             </div>
           </div>
         )}
 
-        <Field label="Description">
+        <Field label={t.unitAddress} hint={t.unitAddressHint}>
+          <input {...register("unitAddress")} className={inputClass} placeholder="B12 – 3" />
+        </Field>
+
+        <Field label={t.description}>
           <textarea {...register("description")} rows={4} className={inputClass} />
         </Field>
       </section>
 
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">Capacity</h2>
+        <h2 className="font-display text-lg font-semibold">{t.capacity}</h2>
         <div className="grid grid-cols-3 gap-md">
-          <Field label="Bedrooms" error={errors.bedrooms?.message}>
+          <Field label={t.bedrooms}>
             <input type="number" min={0} {...register("bedrooms")} className={inputClass} />
           </Field>
-          <Field label="Bathrooms" error={errors.bathrooms?.message}>
+          <Field label={t.bathrooms}>
             <input type="number" min={0} {...register("bathrooms")} className={inputClass} />
           </Field>
-          <Field label="Max guests" error={errors.maxGuests?.message}>
+          <Field label={t.maxGuests}>
             <input type="number" min={1} {...register("maxGuests")} className={inputClass} />
           </Field>
         </div>
         <div className="grid grid-cols-2 gap-md">
-          <Field label="Floor (optional)">
+          <Field label={t.floor}>
             <input type="number" {...register("floor")} className={inputClass} />
           </Field>
-          <Field label="View">
+          <Field label={t.view}>
             <select
               {...register("viewType")}
               className={inputClass}
               onChange={(e) => setValue("viewType", (e.target.value || null) as never)}
             >
-              <option value="">Not specified</option>
+              <option value="">{t.notSpecified}</option>
               {viewTypeOptions.map((v) => (
                 <option key={v} value={v}>
-                  {v.replace("_", " ")}
+                  {viewLabels[v] ?? v}
                 </option>
               ))}
             </select>
           </Field>
         </div>
         <div className="flex flex-wrap gap-lg">
-          <Checkbox label="Parking" {...register("parking")} />
-          <Checkbox label="Beach access" {...register("beachAccess")} />
-          <Checkbox label="Pool access" {...register("poolAccess")} />
+          <Checkbox label={t.parking} {...register("parking")} />
+          <Checkbox label={t.beachAccess} {...register("beachAccess")} />
+          <Checkbox label={t.poolAccess} {...register("poolAccess")} />
         </div>
       </section>
 
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">More details</h2>
+        <h2 className="font-display text-lg font-semibold">{t.moreDetails}</h2>
         <div className="grid grid-cols-2 gap-md">
-          <Field label="Size (m²), optional">
+          <Field label={t.size}>
             <input type="number" min={1} {...register("sizeSqm")} className={inputClass} />
           </Field>
-          <Field label="Beds, optional">
+          <Field label={t.beds}>
             <input type="number" min={1} {...register("beds")} className={inputClass} />
           </Field>
         </div>
-        <Field label="Check-in instructions, optional">
+        <Field label={t.checkIn}>
           <textarea
             {...register("checkInInstructions")}
             rows={2}
-            placeholder="e.g. Keys with the compound gate security, show your booking confirmation."
+            placeholder={t.checkInPlaceholder}
             className={inputClass}
           />
         </Field>
-        <Field label="Compound / village entry requirements, optional">
+        <Field label={t.village}>
           <textarea
             {...register("villageEntryRequirements")}
             rows={2}
-            placeholder="e.g. Guest name must be on the gate list a day in advance."
+            placeholder={t.villagePlaceholder}
             className={inputClass}
           />
         </Field>
         {beachAccess && (
-          <Field label="Beach access details, optional">
+          <Field label={t.beachDetails}>
             <textarea
               {...register("beachAccessDetails")}
               rows={2}
-              placeholder="e.g. 5-minute walk, private beach with sunbeds."
+              placeholder={t.beachPlaceholder}
               className={inputClass}
             />
           </Field>
@@ -504,18 +506,18 @@ export function PropertyForm({
       </section>
 
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">House rules</h2>
+        <h2 className="font-display text-lg font-semibold">{t.houseRules}</h2>
         <div className="flex flex-wrap gap-lg">
-          <Checkbox label="Pets allowed" {...register("petsAllowed")} />
-          <Checkbox label="Parties/events allowed" {...register("partiesAllowed")} />
-          <Checkbox label="Smoking allowed" {...register("smokingAllowed")} />
-          <Checkbox label="Commercial photography allowed" {...register("commercialPhotographyAllowed")} />
+          <Checkbox label={t.pets} {...register("petsAllowed")} />
+          <Checkbox label={t.parties} {...register("partiesAllowed")} />
+          <Checkbox label={t.smoking} {...register("smokingAllowed")} />
+          <Checkbox label={t.photography} {...register("commercialPhotographyAllowed")} />
         </div>
-        <Field label="Cancellation policy">
+        <Field label={t.cancellation}>
           <select {...register("cancellationPolicy")} className={inputClass}>
             {cancellationPolicyOptions.map((p) => (
               <option key={p} value={p}>
-                {p.charAt(0).toUpperCase() + p.slice(1)}
+                {policies[p].label} — {policies[p].description}
               </option>
             ))}
           </select>
@@ -523,53 +525,58 @@ export function PropertyForm({
       </section>
 
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">Pricing</h2>
+        <h2 className="font-display text-lg font-semibold">{t.pricing}</h2>
         <div className="grid grid-cols-2 gap-md">
-          <Field label="Price per night (EGP) — your budget" error={errors.pricePerNight?.message}>
+          <Field label={t.pricePerNight} error={errors.pricePerNight && t.errPrice}>
             <input type="number" min={1} {...register("pricePerNight")} className={inputClass} />
           </Field>
-          <Field label="Minimum stay (nights)" error={errors.minStayNights?.message}>
+          <Field label={t.minStay}>
             <input type="number" min={1} {...register("minStayNights")} className={inputClass} />
           </Field>
         </div>
 
         <div className="flex flex-col gap-xs rounded-md border border-turquoise/30 bg-turquoise-light/50 px-md py-sm">
           <p className="text-xs font-semibold uppercase tracking-wide text-turquoise-dark">
-            Price recommendation
+            {t.recTitle}
           </p>
           {comparableStats ? (
             <>
               <p className="text-sm text-ink">
-                Similar {watchedType.replace("_", " ")}s
-                {watchedCompoundId ? " in this compound" : " on Safe Sahel"} average{" "}
-                <strong>{formatEgp(comparableStats.averagePricePerNight)}</strong> / night, based on{" "}
-                {comparableStats.sampleSize} published listing{comparableStats.sampleSize === 1 ? "" : "s"}.
+                {t.recBody(
+                  typeLabel,
+                  watchedCompoundId ? t.recScopeCompound : t.recScopeAll,
+                  money(locale, comparableStats.averagePricePerNight),
+                  comparableStats.sampleSize,
+                )}
               </p>
               <p className="text-xs text-ink-secondary">
-                A competitive range would be roughly{" "}
-                {formatEgp(Math.round(comparableStats.averagePricePerNight * 0.85))} –{" "}
-                {formatEgp(Math.round(comparableStats.averagePricePerNight * 1.15))} / night.
+                {t.recRange(
+                  money(locale, Math.round(comparableStats.averagePricePerNight * 0.85)),
+                  money(locale, Math.round(comparableStats.averagePricePerNight * 1.15)),
+                )}
               </p>
             </>
           ) : (
-            <p className="text-sm text-ink-secondary">
-              Not enough published {watchedType.replace("_", " ")}s
-              {watchedCompoundId ? " in this compound" : ""} yet to compare — set your own price for
-              now, we&apos;ll show a recommendation here once more listings go live.
-            </p>
+            <p className="text-sm text-ink-secondary">{t.recNone}</p>
           )}
         </div>
 
-        <Checkbox label="Also available for day use" {...register("dayUseEnabled")} />
+        <Checkbox label={t.dayUse} {...register("dayUseEnabled")} />
         {dayUseEnabled && (
-          <Field label="Day-use price (EGP)" error={errors.dayUsePrice?.message}>
+          <Field label={t.dayUsePrice} error={errors.dayUsePrice && t.errDayUse}>
             <input type="number" min={1} {...register("dayUsePrice")} className={inputClass} />
+          </Field>
+        )}
+        <Checkbox label={`🎓 ${t.monthly}`} {...register("monthlyRentalEnabled")} />
+        {monthlyRentalEnabled && (
+          <Field label={t.monthlyPrice} error={errors.monthlyPrice && t.errMonthly}>
+            <input type="number" min={1} {...register("monthlyPrice")} className={inputClass} />
           </Field>
         )}
       </section>
 
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">Amenities</h2>
+        <h2 className="font-display text-lg font-semibold">{t.amenities}</h2>
         {Object.entries(amenitiesByCategory).map(([category, list]) => (
           <div key={category} className="flex flex-col gap-xs">
             <p className="text-xs font-medium uppercase tracking-wide text-ink-secondary">
@@ -596,37 +603,25 @@ export function PropertyForm({
       </section>
 
       <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">Visibility</h2>
-        <Field label="Status">
+        <h2 className="font-display text-lg font-semibold">{t.visibility}</h2>
+        <Field label={t.status} hint={t.publishRules}>
           <select {...register("status")} className={inputClass}>
-            <option value="draft">Draft (only you can see it)</option>
-            <option value="published">Published (visible in search)</option>
+            <option value="draft">{t.draft}</option>
+            <option value="published">{t.published}</option>
           </select>
         </Field>
-        {existing && (
-          <p className="text-xs text-ink-secondary">
-            Subscription:{" "}
-            {existing.subscriptionStatus === "active" ? (
-              <span className="text-turquoise-dark">
-                Active
-                {existing.subscriptionCurrentPeriodEnd &&
-                  ` until ${new Date(existing.subscriptionCurrentPeriodEnd).toLocaleDateString()}`}
-              </span>
-            ) : (
-              "Not active yet — you'll be asked to activate when you publish."
-            )}
-          </p>
-        )}
       </section>
 
-      {needsSubscription && pendingPropertyId && (
-        <SubscriptionGate
-          propertyId={pendingPropertyId}
-          priceEgp={subscriptionPriceEgp}
-          onActivated={handleSubscriptionActivated}
-        />
+      {publishBlockers.length > 0 && (
+        <div className="rounded-lg bg-butter-soft px-md py-sm text-sm">
+          <p className="font-medium text-ink">{t.notPublishedYet}</p>
+          <ul className="mt-xs text-ink-secondary">
+            {blockerTexts(locale, publishBlockers).map((b) => (
+              <li key={b}>• {b}</li>
+            ))}
+          </ul>
+        </div>
       )}
-
       {serverError && <p className="text-sm text-red-600">{serverError}</p>}
 
       <button
@@ -634,28 +629,31 @@ export function PropertyForm({
         disabled={isSubmitting}
         className="w-fit rounded-md bg-turquoise px-xl py-md font-medium text-white hover:bg-turquoise-dark disabled:opacity-60"
       >
-        {isSubmitting ? "Saving…" : existing ? "Save changes" : "Create property"}
+        {isSubmitting ? t.saving : existing ? t.save : t.create}
       </button>
     </form>
   );
 }
 
 const inputClass =
-  "rounded-sm border border-border bg-surface px-md py-sm text-ink outline-none focus:border-turquoise";
+  "w-full rounded-sm border border-border bg-surface px-md py-sm text-ink outline-none focus:border-turquoise";
 
 function Field({
   label,
   error,
+  hint,
   children,
 }: {
   label: string;
-  error?: string;
+  error?: string | false;
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
     <label className="flex flex-col gap-xs">
       <span className="text-sm font-medium text-ink">{label}</span>
       {children}
+      {hint && <span className="text-xs text-ink-secondary">{hint}</span>}
       {error && <span className="text-xs text-red-600">{error}</span>}
     </label>
   );

@@ -4,6 +4,33 @@ import { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { checkFile, sha256Hex } from "@/lib/upload";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { common } from "@/lib/i18n/common";
+
+const MIN_PHOTOS = 5;
+const copy = {
+  en: {
+    upload: "Upload photos",
+    uploading: "Uploading…",
+    cover: "Cover",
+    setCover: "Set as cover",
+    remove: "Remove",
+    progress: (n: number) =>
+      `${n}/${MIN_PHOTOS} photos — a listing needs at least ${MIN_PHOTOS} to go live.`,
+    enough: (n: number) => `${n} photos ✓`,
+  },
+  ar: {
+    upload: "ارفع صور",
+    uploading: "جاري الرفع…",
+    cover: "الغلاف",
+    setCover: "خليها الغلاف",
+    remove: "شيل",
+    progress: (n: number) =>
+      `${n}/${MIN_PHOTOS} صور — الإعلان محتاج ${MIN_PHOTOS} صور على الأقل عشان يتنشر.`,
+    enough: (n: number) => `${n} صور ✓`,
+  },
+};
 
 type PhotoItem = { id: string; url: string; isCover: boolean };
 
@@ -20,6 +47,9 @@ export function PropertyPhotoUploader({
   const [images, setImages] = useState(initialImages);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const locale = useLocale();
+  const t = copy[locale];
+  const c = common[locale];
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -28,7 +58,14 @@ export function PropertyPhotoUploader({
     const supabase = createClient();
 
     for (const file of Array.from(files)) {
-      const path = `${ownerId}/${propertyId}/${crypto.randomUUID()}-${file.name}`;
+      const check = checkFile(file, "photo");
+      if (check !== "ok") {
+        setError(check === "too_large" ? c.fileTooLarge : c.fileTypeNotAllowed);
+        continue;
+      }
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${ownerId}/${propertyId}/${crypto.randomUUID()}.${ext}`;
+      const contentHash = await sha256Hex(file);
       const { error: uploadError } = await supabase.storage
         .from("property-images")
         .upload(path, file);
@@ -48,6 +85,7 @@ export function PropertyPhotoUploader({
           url: publicUrl,
           sort_order: images.length,
           is_cover: images.length === 0,
+          content_hash: contentHash,
         })
         .select("id, url, is_cover")
         .single();
@@ -80,7 +118,7 @@ export function PropertyPhotoUploader({
   return (
     <div className="flex flex-col gap-md">
       <label className="flex w-fit cursor-pointer items-center gap-sm rounded-md border border-dashed border-border px-lg py-md text-sm font-medium text-ink-secondary hover:border-turquoise hover:text-turquoise-dark">
-        {uploading ? "Uploading…" : "Upload photos"}
+        {uploading ? t.uploading : t.upload}
         <input
           type="file"
           accept="image/*"
@@ -90,6 +128,11 @@ export function PropertyPhotoUploader({
           onChange={(e) => handleFiles(e.target.files)}
         />
       </label>
+      <p
+        className={`text-sm font-medium ${images.length < MIN_PHOTOS ? "text-red-600" : "text-turquoise-dark"}`}
+      >
+        {images.length < MIN_PHOTOS ? t.progress(images.length) : t.enough(images.length)}
+      </p>
       {error && <p className="text-sm text-red-600">{error}</p>}
 
       {images.length > 0 && (
@@ -100,7 +143,7 @@ export function PropertyPhotoUploader({
                 <Image src={img.url} alt="" fill className="object-cover" />
                 {img.isCover && (
                   <span className="absolute left-xs top-xs rounded-full bg-butter px-sm py-xs text-xs font-medium">
-                    Cover
+                    {t.cover}
                   </span>
                 )}
               </div>
@@ -110,14 +153,14 @@ export function PropertyPhotoUploader({
                     onClick={() => setCover(img.id)}
                     className="text-turquoise-dark hover:underline"
                   >
-                    Set as cover
+                    {t.setCover}
                   </button>
                 )}
                 <button
                   onClick={() => removeImage(img.id)}
                   className="text-red-600 hover:underline"
                 >
-                  Remove
+                  {t.remove}
                 </button>
               </div>
             </div>

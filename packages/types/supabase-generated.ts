@@ -16,14 +16,22 @@ export type PropertyStatusEnum = "draft" | "pending_review" | "published" | "sus
 export type ViewTypeEnum = "sea_view" | "lagoon_view" | "garden_view" | "street_view" | "no_view";
 export type CancellationPolicyEnum = "flexible" | "moderate" | "strict";
 export type BookingTypeEnum = "overnight" | "day_use";
+/** `pending_payment` / `completed` are legacy values kept for old rows; new flow uses the rest. */
 export type BookingStatusEnum =
-  "pending_payment" | "confirmed" | "cancelled" | "completed" | "declined";
+  "pending" | "pending_payment" | "confirmed" | "cancelled" | "completed" | "declined" | "expired";
 export type AvailabilityReasonEnum = "owner_blocked" | "pending_hold" | "booked";
 export type VerificationStatusEnum = "pending" | "contacted" | "approved" | "rejected";
 export type SubscriptionStatusEnum = "inactive" | "active";
 export type HandoverStageEnum = "check_in" | "check_out";
 export type HandoverStatusEnum =
   "pending" | "check_in_done" | "check_out_done" | "under_review" | "resolved";
+export type HostTypeEnum = "owner" | "broker";
+export type SubscriptionPlanEnum = "monthly" | "season" | "annual" | "student_winter";
+export type PriceTierEnum = "launch" | "basic" | "premium" | "luxury";
+export type ReviewStatusEnum = "pending" | "approved" | "rejected";
+export type OwnershipProofTypeEnum = "compound_card" | "maintenance_bill";
+export type DocumentKindEnum =
+  "verification_id" | "verification_proof" | "broker_authorization" | "guest_id" | "payment_proof";
 
 type ProfilesRow = {
   id: string;
@@ -34,6 +42,11 @@ type ProfilesRow = {
   username: string | null;
   verified: boolean;
   locale: string;
+  legal_name: string | null;
+  host_type: HostTypeEnum | null;
+  host_since: string | null;
+  verification_revoked_at: string | null;
+  verification_revoked_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -53,10 +66,17 @@ type VerificationRequestsRow = {
   profile_id: string;
   full_name: string;
   phone: string;
-  sahel_location: string;
+  sahel_location: string | null;
   id_document_url: string;
   status: VerificationStatusEnum;
   admin_notes: string | null;
+  kind: HostTypeEnum;
+  ownership_proof_path: string | null;
+  ownership_proof_type: OwnershipProofTypeEnum | null;
+  rejection_reason: string | null;
+  consent_at: string | null;
+  consent_version: string | null;
+  reviewed_by: string | null;
   created_at: string;
   reviewed_at: string | null;
 };
@@ -65,8 +85,13 @@ type VerificationRequestsInsert = {
   profile_id: string;
   full_name: string;
   phone: string;
-  sahel_location: string;
+  sahel_location?: string | null;
   id_document_url: string;
+  kind?: HostTypeEnum;
+  ownership_proof_path?: string | null;
+  ownership_proof_type?: OwnershipProofTypeEnum | null;
+  consent_at?: string | null;
+  consent_version?: string | null;
   status?: VerificationStatusEnum;
   admin_notes?: string | null;
   reviewed_at?: string | null;
@@ -128,6 +153,11 @@ type CompoundsRow = {
   cover_image_url: string | null;
   latitude: number | null;
   longitude: number | null;
+  name_ar: string | null;
+  is_focus: boolean;
+  focus_rank: number | null;
+  hidden: boolean;
+  merged_into: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -140,6 +170,10 @@ type CompoundsInsert = {
   cover_image_url?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  name_ar?: string | null;
+  is_focus?: boolean;
+  focus_rank?: number | null;
+  hidden?: boolean;
 };
 
 type PropertiesRow = {
@@ -180,6 +214,15 @@ type PropertiesRow = {
   smoking_allowed: boolean;
   commercial_photography_allowed: boolean;
   cancellation_policy: CancellationPolicyEnum;
+  unit_address: string | null;
+  monthly_rental_enabled: boolean;
+  monthly_price: number | null;
+  unpublished_reason: string | null;
+  first_published_at: string | null;
+  calendar_updated_at: string | null;
+  flagged_for_review: boolean;
+  flag_reason: string | null;
+  flagged_at: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -219,6 +262,13 @@ type PropertiesInsert = {
   smoking_allowed?: boolean;
   commercial_photography_allowed?: boolean;
   cancellation_policy?: CancellationPolicyEnum;
+  unit_address?: string | null;
+  monthly_rental_enabled?: boolean;
+  monthly_price?: number | null;
+  unpublished_reason?: string | null;
+  flagged_for_review?: boolean;
+  flag_reason?: string | null;
+  deleted_at?: string | null;
 };
 
 type PropertyImagesRow = {
@@ -227,6 +277,7 @@ type PropertyImagesRow = {
   url: string;
   sort_order: number;
   is_cover: boolean;
+  content_hash: string | null;
   created_at: string;
 };
 type PropertyImagesInsert = {
@@ -235,6 +286,7 @@ type PropertyImagesInsert = {
   url: string;
   sort_order?: number;
   is_cover?: boolean;
+  content_hash?: string | null;
 };
 
 type AmenitiesRow = {
@@ -318,10 +370,20 @@ type BookingsRow = {
   guest_note: string | null;
   owner_note: string | null;
   cancellation_fee_amount: number;
+  reference: string;
+  adults_count: number | null;
+  expires_at: string | null;
+  confirmed_at: string | null;
+  declined_at: string | null;
+  expired_at: string | null;
+  decline_reason: string | null;
+  cancelled_by: "guest" | "owner" | "admin" | "system" | null;
+  cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
   cancelled_at: string | null;
 };
+/** Bookings are created/changed only via RPCs (request_booking etc.); kept for typing completeness. */
 type BookingsInsert = {
   id?: string;
   property_id: string;
@@ -431,129 +493,311 @@ type ReviewsInsert = {
 type FavoritesRow = { guest_id: string; property_id: string; created_at: string };
 type FavoritesInsert = { guest_id: string; property_id: string };
 
+// --- 0018: trust, subscriptions, ID security, analytics ----------------------
+
+type SubscriptionPricesRow = {
+  plan: SubscriptionPlanEnum | "featured_week";
+  tier: PriceTierEnum;
+  price_egp: number;
+  updated_at: string;
+};
+type SubscriptionPricesInsert = {
+  plan: SubscriptionPlanEnum | "featured_week";
+  tier: PriceTierEnum;
+  price_egp: number;
+};
+
+type BrokerAuthorizationsRow = {
+  id: string;
+  property_id: string;
+  broker_id: string;
+  document_path: string;
+  owner_full_name: string;
+  owner_phone: string | null;
+  status: ReviewStatusEnum;
+  rejection_reason: string | null;
+  consent_at: string;
+  consent_version: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+type BrokerAuthorizationsInsert = {
+  id?: string;
+  property_id: string;
+  broker_id: string;
+  document_path: string;
+  owner_full_name: string;
+  owner_phone?: string | null;
+  consent_at: string;
+  consent_version: string;
+};
+
+type SubscriptionPaymentsRow = {
+  id: string;
+  owner_id: string;
+  kind: "subscription" | "featured";
+  plan: SubscriptionPlanEnum | null;
+  property_ids: string[];
+  featured_weeks: number | null;
+  amount_egp: number;
+  quoted_breakdown: unknown;
+  instapay_reference: string;
+  proof_path: string | null;
+  status: ReviewStatusEnum;
+  rejection_reason: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+};
+
+type ListingSubscriptionsRow = {
+  id: string;
+  property_id: string;
+  owner_id: string;
+  plan: SubscriptionPlanEnum;
+  tier: PriceTierEnum;
+  price_egp: number;
+  discount_pct: number;
+  amount_egp: number;
+  starts_at: string;
+  ends_at: string;
+  status: "active" | "cancelled";
+  source: "payment" | "admin";
+  payment_id: string | null;
+  is_founder_rate: boolean;
+  guarantee_extended_at: string | null;
+  reminder_sent_at: string | null;
+  created_at: string;
+};
+
+type FeaturedSlotsRow = {
+  id: string;
+  property_id: string;
+  compound_id: string | null;
+  starts_at: string;
+  ends_at: string;
+  source: "payment" | "founder_free" | "admin";
+  payment_id: string | null;
+  cancelled_at: string | null;
+  created_at: string;
+};
+
+type NotificationsRow = {
+  id: string;
+  recipient_id: string;
+  kind: string;
+  payload: Record<string, unknown>;
+  channel: "email" | "in_app";
+  created_at: string;
+  sent_at: string | null;
+  send_error: string | null;
+  read_at: string | null;
+};
+
+type OwnerStrikesRow = {
+  id: string;
+  owner_id: string;
+  property_id: string | null;
+  booking_id: string | null;
+  reason: string;
+  created_at: string;
+  revoked_at: string | null;
+  revoked_by: string | null;
+  revoke_reason: string | null;
+};
+
+type ListingEventsRow = {
+  id: number;
+  property_id: string | null;
+  compound_id: string | null;
+  event: "view" | "whatsapp_click" | "booking_request" | "booking_confirmed" | "site_visit";
+  session_id: string | null;
+  user_id: string | null;
+  booking_id: string | null;
+  value_egp: number | null;
+  created_at: string;
+};
+
+type CheckinChecklistsRow = {
+  booking_id: string;
+  items: unknown;
+  notes: string | null;
+  owner_confirmed_at: string | null;
+  guest_confirmed_at: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type BookingGuestIdsRow = {
+  id: string;
+  booking_id: string;
+  uploaded_by: string;
+  guest_full_name: string;
+  storage_path: string | null;
+  consent_at: string;
+  consent_version: string;
+  purge_after: string;
+  purged_at: string | null;
+  created_at: string;
+};
+
+type DocumentAccessLogRow = {
+  id: number;
+  accessor_id: string | null;
+  accessor_role: string;
+  document_kind: DocumentKindEnum;
+  record_id: string;
+  bucket: string;
+  storage_path: string;
+  subject_profile_id: string | null;
+  booking_id: string | null;
+  accessed_at: string;
+};
+
+type ListingDuplicateFlagsRow = {
+  id: string;
+  property_id: string;
+  other_property_id: string;
+  score: number;
+  reasons: string[];
+  status: "open" | "dismissed" | "confirmed";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type DataMigrationLogRow = {
+  id: number;
+  migration: string;
+  entity: string;
+  entity_id: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  created_at: string;
+};
+
+/**
+ * Tables written by SECURITY DEFINER RPCs. Insert is `never` (clients can't
+ * insert); Update covers the few edits RLS allows (admin flags, read_at…).
+ */
+type RpcTable<Row> = {
+  Row: Row;
+  Insert: never;
+  Update: Partial<Row>;
+  Relationships: [];
+};
+
+export type QuoteLine = {
+  property_id: string;
+  title: string;
+  nightly_price: number;
+  tier: PriceTierEnum;
+  list_price: number;
+  discount_pct: number;
+  amount: number;
+  founder_rate: boolean;
+  included_free: boolean;
+};
+
+export type BookingContact = {
+  role: "guest" | "owner";
+  status: BookingStatusEnum;
+  reference: string;
+  property_title?: string;
+  owner_display_name?: string | null;
+  owner_legal_name?: string | null;
+  owner_phone?: string | null;
+  owner_verified?: boolean;
+  owner_host_type?: HostTypeEnum;
+  guest_name?: string | null;
+  guest_phone?: string | null;
+};
+
+export type GuaranteeStatusRow = {
+  subscription_id: string;
+  property_id: string;
+  owner_id: string;
+  starts_at: string;
+  ends_at: string;
+  window_ends_at: string;
+  requests_in_window: number;
+  status: "tracking" | "eligible" | "not_eligible" | "granted";
+  granted_at: string | null;
+};
+
+export type ListingStatsRow = {
+  property_id: string;
+  views: number;
+  whatsapp_clicks: number;
+  booking_requests: number;
+  confirmed_bookings: number;
+  booking_value: number;
+};
+
+export type WeeklyKpiRow = {
+  week_start: string;
+  new_listings: number;
+  verified_listings: number;
+  site_visits: number;
+  booking_requests: number;
+  confirmed_bookings: number;
+};
+
+type Table<Row, Insert> = {
+  Row: Row;
+  Insert: Insert;
+  Update: Partial<Insert>;
+  Relationships: [];
+};
+
 export type Database = {
   public: {
     Tables: {
-      profiles: {
-        Row: ProfilesRow;
-        Insert: ProfilesInsert;
-        Update: Partial<ProfilesInsert>;
+      profiles: Table<ProfilesRow, ProfilesInsert>;
+      compounds: Table<CompoundsRow, CompoundsInsert>;
+      properties: Table<PropertiesRow, PropertiesInsert>;
+      property_images: Table<PropertyImagesRow, PropertyImagesInsert>;
+      amenities: Table<AmenitiesRow, AmenitiesInsert>;
+      property_amenities: Table<PropertyAmenitiesRow, PropertyAmenitiesInsert>;
+      property_inventory_categories: Table<
+        PropertyInventoryCategoriesRow,
+        PropertyInventoryCategoriesInsert
+      >;
+      property_inventory_items: Table<PropertyInventoryItemsRow, PropertyInventoryItemsInsert>;
+      availability_blocks: Table<AvailabilityBlocksRow, AvailabilityBlocksInsert>;
+      bookings: Table<BookingsRow, BookingsInsert>;
+      platform_settings: Table<PlatformSettingsRow, PlatformSettingsInsert>;
+      reviews: Table<ReviewsRow, ReviewsInsert>;
+      favorites: Table<FavoritesRow, FavoritesInsert>;
+      verification_requests: Table<VerificationRequestsRow, VerificationRequestsInsert>;
+      subscription_codes: Table<SubscriptionCodesRow, SubscriptionCodesInsert>;
+      conversations: Table<ConversationsRow, ConversationsInsert>;
+      messages: Table<MessagesRow, MessagesInsert>;
+      booking_handovers: Table<BookingHandoversRow, BookingHandoversInsert>;
+      booking_handover_photos: Table<BookingHandoverPhotosRow, BookingHandoverPhotosInsert>;
+      guest_reviews: Table<GuestReviewsRow, GuestReviewsInsert>;
+      subscription_prices: Table<SubscriptionPricesRow, SubscriptionPricesInsert>;
+      broker_authorizations: {
+        Row: BrokerAuthorizationsRow;
+        Insert: BrokerAuthorizationsInsert;
+        Update: Partial<BrokerAuthorizationsRow>;
         Relationships: [];
       };
-      compounds: {
-        Row: CompoundsRow;
-        Insert: CompoundsInsert;
-        Update: Partial<CompoundsInsert>;
-        Relationships: [];
-      };
-      properties: {
-        Row: PropertiesRow;
-        Insert: PropertiesInsert;
-        Update: Partial<PropertiesInsert>;
-        Relationships: [];
-      };
-      property_images: {
-        Row: PropertyImagesRow;
-        Insert: PropertyImagesInsert;
-        Update: Partial<PropertyImagesInsert>;
-        Relationships: [];
-      };
-      amenities: {
-        Row: AmenitiesRow;
-        Insert: AmenitiesInsert;
-        Update: Partial<AmenitiesInsert>;
-        Relationships: [];
-      };
-      property_amenities: {
-        Row: PropertyAmenitiesRow;
-        Insert: PropertyAmenitiesInsert;
-        Update: Partial<PropertyAmenitiesInsert>;
-        Relationships: [];
-      };
-      property_inventory_categories: {
-        Row: PropertyInventoryCategoriesRow;
-        Insert: PropertyInventoryCategoriesInsert;
-        Update: Partial<PropertyInventoryCategoriesInsert>;
-        Relationships: [];
-      };
-      property_inventory_items: {
-        Row: PropertyInventoryItemsRow;
-        Insert: PropertyInventoryItemsInsert;
-        Update: Partial<PropertyInventoryItemsInsert>;
-        Relationships: [];
-      };
-      availability_blocks: {
-        Row: AvailabilityBlocksRow;
-        Insert: AvailabilityBlocksInsert;
-        Update: Partial<AvailabilityBlocksInsert>;
-        Relationships: [];
-      };
-      bookings: {
-        Row: BookingsRow;
-        Insert: BookingsInsert;
-        Update: Partial<BookingsInsert>;
-        Relationships: [];
-      };
-      platform_settings: {
-        Row: PlatformSettingsRow;
-        Insert: PlatformSettingsInsert;
-        Update: Partial<PlatformSettingsInsert>;
-        Relationships: [];
-      };
-      reviews: {
-        Row: ReviewsRow;
-        Insert: ReviewsInsert;
-        Update: Partial<ReviewsInsert>;
-        Relationships: [];
-      };
-      favorites: {
-        Row: FavoritesRow;
-        Insert: FavoritesInsert;
-        Update: Partial<FavoritesInsert>;
-        Relationships: [];
-      };
-      verification_requests: {
-        Row: VerificationRequestsRow;
-        Insert: VerificationRequestsInsert;
-        Update: Partial<VerificationRequestsInsert>;
-        Relationships: [];
-      };
-      subscription_codes: {
-        Row: SubscriptionCodesRow;
-        Insert: SubscriptionCodesInsert;
-        Update: Partial<SubscriptionCodesInsert>;
-        Relationships: [];
-      };
-      conversations: {
-        Row: ConversationsRow;
-        Insert: ConversationsInsert;
-        Update: Partial<ConversationsInsert>;
-        Relationships: [];
-      };
-      messages: {
-        Row: MessagesRow;
-        Insert: MessagesInsert;
-        Update: Partial<MessagesInsert>;
-        Relationships: [];
-      };
-      booking_handovers: {
-        Row: BookingHandoversRow;
-        Insert: BookingHandoversInsert;
-        Update: Partial<BookingHandoversInsert>;
-        Relationships: [];
-      };
-      booking_handover_photos: {
-        Row: BookingHandoverPhotosRow;
-        Insert: BookingHandoverPhotosInsert;
-        Update: Partial<BookingHandoverPhotosInsert>;
-        Relationships: [];
-      };
-      guest_reviews: {
-        Row: GuestReviewsRow;
-        Insert: GuestReviewsInsert;
-        Update: Partial<GuestReviewsInsert>;
-        Relationships: [];
-      };
+      subscription_payments: RpcTable<SubscriptionPaymentsRow>;
+      listing_subscriptions: RpcTable<ListingSubscriptionsRow>;
+      featured_slots: RpcTable<FeaturedSlotsRow>;
+      notifications: RpcTable<NotificationsRow>;
+      owner_strikes: RpcTable<OwnerStrikesRow>;
+      listing_events: RpcTable<ListingEventsRow>;
+      checkin_checklists: RpcTable<CheckinChecklistsRow>;
+      booking_guest_ids: RpcTable<BookingGuestIdsRow>;
+      document_access_log: RpcTable<DocumentAccessLogRow>;
+      listing_duplicate_flags: RpcTable<ListingDuplicateFlagsRow>;
+      data_migration_log: RpcTable<DataMigrationLogRow>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -561,6 +805,112 @@ export type Database = {
         Args: { p_property_id: string; p_code: string };
         Returns: boolean;
       };
+      request_booking: {
+        Args: {
+          p_property_id: string;
+          p_check_in: string;
+          p_check_out: string;
+          p_guests: number;
+          p_adults?: number | null;
+          p_note?: string | null;
+        };
+        Returns: { booking_id: string; reference: string }[];
+      };
+      respond_to_booking: {
+        Args: { p_booking_id: string; p_decision: "confirm" | "decline"; p_note?: string | null };
+        Returns: string;
+      };
+      cancel_booking: {
+        Args: { p_booking_id: string; p_reason?: string | null };
+        Returns: string;
+      };
+      expire_stale_bookings: { Args: Record<string, never>; Returns: number };
+      get_booking_contact: { Args: { p_booking_id: string }; Returns: BookingContact | null };
+      mark_calendar_reviewed: { Args: { p_property_id: string }; Returns: string };
+      save_checkin_checklist: {
+        Args: { p_booking_id: string; p_items: unknown; p_notes?: string | null };
+        Returns: undefined;
+      };
+      confirm_checkin_checklist: { Args: { p_booking_id: string }; Returns: undefined };
+      register_guest_id: {
+        Args: {
+          p_booking_id: string;
+          p_storage_path: string;
+          p_guest_full_name: string;
+          p_consent_version: string;
+        };
+        Returns: string;
+      };
+      withdraw_guest_id: { Args: { p_id: string }; Returns: undefined };
+      authorize_document_access: {
+        Args: { p_kind: DocumentKindEnum; p_record_id: string };
+        Returns: { bucket: string; storage_path: string }[];
+      };
+      review_verification: {
+        Args: {
+          p_request_id: string;
+          p_approve: boolean;
+          p_legal_name?: string | null;
+          p_reason?: string | null;
+        };
+        Returns: undefined;
+      };
+      revoke_verification: {
+        Args: { p_profile_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      review_broker_authorization: {
+        Args: { p_id: string; p_approve: boolean; p_reason?: string | null };
+        Returns: undefined;
+      };
+      quote_subscription: {
+        Args: { p_property_ids: string[]; p_plan: SubscriptionPlanEnum };
+        Returns: QuoteLine[];
+      };
+      submit_payment: {
+        Args: {
+          p_kind: "subscription" | "featured";
+          p_plan: SubscriptionPlanEnum | null;
+          p_property_ids: string[];
+          p_weeks: number | null;
+          p_reference: string;
+          p_proof_path: string | null;
+        };
+        Returns: string;
+      };
+      approve_payment: { Args: { p_payment_id: string }; Returns: undefined };
+      reject_payment: { Args: { p_payment_id: string; p_reason: string }; Returns: undefined };
+      claim_founder_featured: { Args: { p_property_id: string }; Returns: string };
+      admin_grant_featured: { Args: { p_property_id: string; p_days: number }; Returns: string };
+      guarantee_status: { Args: Record<string, never>; Returns: GuaranteeStatusRow[] };
+      grant_guarantee_month: { Args: { p_subscription_id: string }; Returns: undefined };
+      property_publish_blockers: { Args: { p_property_id: string }; Returns: string[] | null };
+      host_badges: {
+        Args: { p_owner_ids: string[] };
+        Returns: {
+          owner_id: string;
+          verified: boolean;
+          host_type: HostTypeEnum | null;
+          founding: boolean;
+        }[];
+      };
+      is_founding_host: { Args: { p_profile_id: string }; Returns: boolean };
+      broker_discount_pct: { Args: { p_owner_id: string }; Returns: number };
+      track_listing_event: {
+        Args: {
+          p_event: "view" | "whatsapp_click" | "site_visit";
+          p_property_id?: string | null;
+          p_session_id?: string | null;
+        };
+        Returns: undefined;
+      };
+      owner_listing_stats: { Args: { p_from: string; p_to: string }; Returns: ListingStatsRow[] };
+      admin_weekly_kpis: {
+        Args: { p_weeks?: number; p_compound_id?: string | null };
+        Returns: WeeklyKpiRow[];
+      };
+      run_daily_maintenance: { Args: Record<string, never>; Returns: Record<string, number> };
+      enqueue_calendar_reminders: { Args: Record<string, never>; Returns: number };
     };
     Enums: {
       user_role: UserRoleEnum;

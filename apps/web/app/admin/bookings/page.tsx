@@ -1,72 +1,57 @@
-import { formatEgp } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/server";
-
-const statusStyles: Record<string, string> = {
-  pending_payment: "bg-butter-soft text-ink",
-  confirmed: "bg-turquoise-light text-turquoise-dark",
-  declined: "bg-red-50 text-red-700",
-  cancelled: "bg-surface-soft text-ink-secondary",
-  completed: "bg-surface-soft text-ink-secondary",
-};
+import { getLocale } from "@/lib/locale";
+import { adminDict } from "@/lib/i18n/admin";
+import { ownerDict } from "@/lib/i18n/owner";
+import { date, money } from "@/lib/i18n/format";
+import { profileMap, propertyMap } from "@/lib/queries/admin";
+import { BookingStatusBadge, ExpiryCountdown } from "@/components/booking-bits";
 
 export default async function AdminBookingsPage() {
   const supabase = await createClient();
+  await supabase.rpc("expire_stale_bookings");
+  const locale = await getLocale();
+  const t = adminDict[locale].nav;
+  const o = ownerDict[locale].bookings;
   const { data: bookings } = await supabase
     .from("bookings")
-    .select("id, property_id, guest_id, check_in, check_out, total_amount, status")
+    .select(
+      "id, reference, property_id, guest_id, check_in, check_out, base_price, status, expires_at, cancelled_by",
+    )
     .order("created_at", { ascending: false })
-    .limit(100);
+    .limit(200);
 
-  const propertyIds = [...new Set((bookings ?? []).map((b) => b.property_id))];
-  const guestIds = [...new Set((bookings ?? []).map((b) => b.guest_id))];
-
-  const [{ data: properties }, { data: guests }] = await Promise.all([
-    propertyIds.length > 0
-      ? supabase.from("properties").select("id, title").in("id", propertyIds)
-      : Promise.resolve({ data: [] as { id: string; title: string }[] }),
-    guestIds.length > 0
-      ? supabase.from("profiles").select("id, full_name").in("id", guestIds)
-      : Promise.resolve({ data: [] as { id: string; full_name: string | null }[] }),
+  const [props, guests] = await Promise.all([
+    propertyMap((bookings ?? []).map((b) => b.property_id)),
+    profileMap((bookings ?? []).map((b) => b.guest_id)),
   ]);
-
-  const propertyTitleById = new Map((properties ?? []).map((p) => [p.id, p.title]));
-  const guestNameById = new Map((guests ?? []).map((g) => [g.id, g.full_name]));
 
   return (
     <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">Bookings</h1>
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead className="bg-surface-soft text-left text-ink-secondary">
-            <tr>
-              <th className="p-md">Property</th>
-              <th className="p-md">Guest</th>
-              <th className="p-md">Dates</th>
-              <th className="p-md">Total</th>
-              <th className="p-md">Status</th>
-            </tr>
-          </thead>
+      <h1 className="font-display text-2xl font-bold">{t.bookings}</h1>
+      <div className="overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full min-w-[720px] text-sm">
           <tbody>
-            {(bookings ?? []).map((booking) => (
-              <tr key={booking.id} className="border-t border-border">
-                <td className="p-md font-medium text-ink">
-                  {propertyTitleById.get(booking.property_id) ?? "—"}
-                </td>
+            {(bookings ?? []).map((b) => (
+              <tr key={b.id} className="border-t border-border first:border-t-0">
+                <td className="p-md font-mono text-xs">{b.reference}</td>
+                <td className="p-md font-medium">{props.get(b.property_id)?.title ?? "—"}</td>
                 <td className="p-md text-ink-secondary">
-                  {guestNameById.get(booking.guest_id) ?? "—"}
+                  {o.guest}: {guests.get(b.guest_id)?.name ?? "—"}
                 </td>
-                <td className="p-md text-ink-secondary">
-                  {booking.check_in} → {booking.check_out}
+                <td className="whitespace-nowrap p-md text-ink-secondary">
+                  {date(locale, b.check_in)} → {date(locale, b.check_out)}
                 </td>
-                <td className="p-md text-ink-secondary">
-                  {formatEgp(Number(booking.total_amount))}
-                </td>
+                <td className="p-md tabular-nums">{money(locale, Number(b.base_price))}</td>
                 <td className="p-md">
-                  <span
-                    className={`rounded-full px-sm py-xs text-xs font-medium capitalize ${statusStyles[booking.status]}`}
-                  >
-                    {booking.status.replace("_", " ")}
-                  </span>
+                  <div className="flex flex-col items-start gap-xs">
+                    <BookingStatusBadge status={b.status} />
+                    {b.status === "pending" && b.expires_at && (
+                      <ExpiryCountdown expiresAt={b.expires_at} />
+                    )}
+                    {b.cancelled_by && (
+                      <span className="text-xs text-ink-secondary">← {b.cancelled_by}</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

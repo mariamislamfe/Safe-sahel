@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { formatEgp } from "@safe-sahel/utils";
+import { daysSince } from "@safe-sahel/utils";
 import { getLocale } from "@/lib/locale";
 import { getDictionary } from "@/lib/i18n/dictionary";
 import { createClient } from "@/lib/supabase/server";
@@ -14,6 +14,10 @@ import { PropertyGallery } from "@/components/property-gallery";
 import { RatingBreakdown } from "@/components/rating-breakdown";
 import { FaqAccordion } from "@/components/faq-accordion";
 import { InventoryPreview } from "@/components/inventory-preview";
+import { ListingViewTracker } from "@/components/tracking";
+import { guestDict } from "@/lib/i18n/guest";
+import { common } from "@/lib/i18n/common";
+import { money } from "@/lib/i18n/format";
 
 export async function generateMetadata(props: PageProps<"/properties/[slug]">): Promise<Metadata> {
   const { slug } = await props.params;
@@ -27,15 +31,10 @@ export async function generateMetadata(props: PageProps<"/properties/[slug]">): 
   };
 }
 
-const viewTypeLabels: Record<string, string> = {
-  sea_view: "Sea view",
-  lagoon_view: "Lagoon view",
-  garden_view: "Garden view",
-  street_view: "Street view",
-  no_view: "No view",
-};
-
-const amenityCategoryGroup: Record<string, "general" | "bathroomSpa" | "kitchenDining" | "safetyAccessibility" | "entertainment"> = {
+const amenityCategoryGroup: Record<
+  string,
+  "general" | "bathroomSpa" | "kitchenDining" | "safetyAccessibility" | "entertainment"
+> = {
   comfort: "general",
   outdoor: "general",
   kitchen: "kitchenDining",
@@ -55,6 +54,9 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
   const locale = await getLocale();
   const dict = getDictionary(locale);
   const t = dict.propertyDetail;
+  const g = guestDict[locale].listing;
+  const c = common[locale];
+  const calendarAge = daysSince(property.calendarUpdatedAt);
   const supabase = await createClient();
 
   const [unavailableRanges, reviews, inventory, userResult] = await Promise.all([
@@ -72,18 +74,27 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
 
   const amenitiesByGroup = property.amenities.reduce<Record<string, typeof property.amenities>>(
     (acc, amenity) => {
-      const group = amenity.category ? (amenityCategoryGroup[amenity.category] ?? "general") : "general";
+      const group = amenity.category
+        ? (amenityCategoryGroup[amenity.category] ?? "general")
+        : "general";
       (acc[group] ??= []).push(amenity);
       return acc;
     },
     {},
   );
-  const groupOrder = ["general", "bathroomSpa", "kitchenDining", "safetyAccessibility", "entertainment"] as const;
+  const groupOrder = [
+    "general",
+    "bathroomSpa",
+    "kitchenDining",
+    "safetyAccessibility",
+    "entertainment",
+  ] as const;
 
   const cancellationInfo = t.cancellationPolicies[property.cancellationPolicy];
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-2xl px-lg py-2xl">
+      <ListingViewTracker propertyId={property.id} />
       <PropertyGallery images={property.images} title={property.title} locale={locale} />
 
       <div className="grid grid-cols-1 gap-2xl lg:grid-cols-3">
@@ -105,10 +116,18 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
                   )}
                 </p>
               </div>
-              <div className="flex items-center gap-sm">
-                {property.verified && (
+              <div className="flex flex-wrap items-center gap-sm">
+                {property.host.verified && (
                   <span className="rounded-full bg-butter px-md py-xs text-sm font-semibold text-ink">
-                    Verified
+                    ✓{" "}
+                    {property.host.hostType === "broker"
+                      ? c.badges.approvedBroker
+                      : c.badges.verifiedOwner}
+                  </span>
+                )}
+                {property.host.founding && (
+                  <span className="rounded-full bg-ink px-md py-xs text-sm font-semibold text-butter">
+                    {c.badges.foundingHost}
                   </span>
                 )}
                 <FavoriteButton propertyId={property.id} />
@@ -136,7 +155,7 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
               <span>
                 {property.maxGuests} {t.guests}
               </span>
-              {property.viewType && <span>{viewTypeLabels[property.viewType]}</span>}
+              {property.viewType && <span>{g.viewTypes[property.viewType]}</span>}
             </div>
           </div>
 
@@ -212,7 +231,7 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
             </div>
           )}
 
-          <InventoryPreview inventory={inventory} title="What's inside" />
+          <InventoryPreview inventory={inventory} title={g.whatsInside} />
 
           {/* House rules */}
           <div className="flex flex-col gap-sm border-b border-border pb-xl">
@@ -226,9 +245,14 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
                   ["commercialPhotography", property.commercialPhotographyAllowed],
                 ] as const
               ).map(([key, allowed]) => (
-                <div key={key} className="flex flex-col gap-0.5 rounded-lg border border-border px-md py-sm">
+                <div
+                  key={key}
+                  className="flex flex-col gap-0.5 rounded-lg border border-border px-md py-sm"
+                >
                   <span className="text-xs text-ink-secondary">{t.houseRules[key]}</span>
-                  <span className={`text-sm font-medium ${allowed ? "text-turquoise-dark" : "text-ink-secondary"}`}>
+                  <span
+                    className={`text-sm font-medium ${allowed ? "text-turquoise-dark" : "text-ink-secondary"}`}
+                  >
                     {allowed ? t.allowed : t.notAllowed}
                   </span>
                 </div>
@@ -258,7 +282,8 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
               {averageRating !== null && (
                 <>
                   {" · "}
-                  <span className="text-butter">★</span> {averageRating.toFixed(1)} ({reviews.length})
+                  <span className="text-butter">★</span> {averageRating.toFixed(1)} (
+                  {reviews.length})
                 </>
               )}
             </h2>
@@ -278,7 +303,9 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
                     className="flex flex-col gap-xs rounded-xl border border-border p-md"
                   >
                     <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium text-ink">{review.guestName ?? "Guest"}</span>
+                      <span className="font-medium text-ink">
+                        {review.guestName ?? g.guestFallback}
+                      </span>
                       <span className="text-butter">{"★".repeat(review.ratingOverall)}</span>
                     </div>
                     {review.comment && (
@@ -308,19 +335,29 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
         <div className="lg:col-span-1">
           <div className="sticky top-24 flex flex-col gap-md rounded-2xl border border-border bg-surface p-lg shadow-lg shadow-ink/5">
             <p className="font-display text-2xl font-bold text-ink">
-              {formatEgp(property.pricePerNight)}{" "}
-              <span className="text-base font-normal text-ink-secondary">/ night</span>
+              {money(locale, property.pricePerNight)}{" "}
+              <span className="text-base font-normal text-ink-secondary">{g.perNight}</span>
             </p>
             {property.dayUseEnabled && property.dayUsePrice !== null && (
               <p className="text-sm text-ink-secondary">
-                Day use also available from {formatEgp(property.dayUsePrice)}
+                {g.dayUseFrom(money(locale, property.dayUsePrice))}
               </p>
             )}
             {property.minStayNights > 1 && (
-              <p className="text-sm text-ink-secondary">
-                Minimum stay: {property.minStayNights} nights
-              </p>
+              <p className="text-sm text-ink-secondary">{g.minStay(property.minStayNights)}</p>
             )}
+            {property.monthlyRentalEnabled && property.monthlyPrice !== null && (
+              <div className="rounded-lg border border-turquoise/30 bg-turquoise-light/50 px-md py-sm text-sm">
+                <p className="font-semibold text-ink">
+                  🎓 {g.monthlyTitle} · {money(locale, property.monthlyPrice)} {g.perMonth}
+                </p>
+                <p className="text-xs text-ink-secondary">{g.monthlyBody}</p>
+              </div>
+            )}
+            <p className="text-xs text-ink-secondary">
+              🗓️{" "}
+              {calendarAge === null ? g.calendarUnknown : g.calendarUpdated(c.daysAgo(calendarAge))}
+            </p>
             <BookingForm
               propertyId={property.id}
               pricePerNight={property.pricePerNight}
@@ -334,4 +371,3 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
     </main>
   );
 }
-

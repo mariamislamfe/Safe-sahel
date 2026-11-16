@@ -109,15 +109,12 @@ export function useRespondToBooking() {
       bookingId: string;
       decision: "confirmed" | "declined";
     }) => {
-      await supabase.from("bookings").update({ status: decision }).eq("id", bookingId);
-      if (decision === "confirmed") {
-        await supabase
-          .from("availability_blocks")
-          .update({ reason: "booked" })
-          .eq("booking_id", bookingId);
-      } else {
-        await supabase.from("availability_blocks").delete().eq("booking_id", bookingId);
-      }
+      // respond_to_booking() blocks the dates on confirm and enforces the 24h expiry.
+      const { error } = await supabase.rpc("respond_to_booking", {
+        p_booking_id: bookingId,
+        p_decision: decision === "confirmed" ? "confirm" : "decline",
+      });
+      if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["owner", "bookings"] }),
   });

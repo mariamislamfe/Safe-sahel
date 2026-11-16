@@ -2,8 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { formatEgp } from "@safe-sahel/utils";
+import { rpcErrorCode } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/client";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { guestDict } from "@/lib/i18n/guest";
+import { errorText } from "@/lib/i18n/common";
+import { money } from "@/lib/i18n/format";
 
 function daysUntil(dateIso: string): number {
   const today = new Date();
@@ -12,48 +16,45 @@ function daysUntil(dateIso: string): number {
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
 
+/** Guest-side cancel / withdraw — goes through cancel_booking() (no direct table writes). */
 export function CancelBookingButton({
   bookingId,
   checkIn,
   depositAmount,
+  status,
 }: {
   bookingId: string;
   checkIn: string;
   depositAmount: number;
+  status: string;
 }) {
   const router = useRouter();
+  const locale = useLocale();
+  const t = guestDict[locale].cancel;
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isLate = daysUntil(checkIn) < 3;
+  const isLate = status === "confirmed" && daysUntil(checkIn) < 3;
 
   async function cancel() {
-    const message = isLate
-      ? `This is within 3 days of check-in, so your ${formatEgp(depositAmount)} deposit won't be refunded. Cancel anyway?`
-      : "Cancel this booking? You'll get a full refund since it's 3+ days before check-in.";
+    const message =
+      status === "pending"
+        ? t.confirmPending
+        : isLate
+          ? t.confirmLate(money(locale, depositAmount))
+          : t.confirmEarly;
     if (!confirm(message)) return;
 
     setCancelling(true);
     setError(null);
-    const supabase = createClient();
-
-    const { error: updateError } = await supabase
-      .from("bookings")
-      .update({
-        status: "cancelled",
-        cancellation_fee_amount: isLate ? depositAmount : 0,
-      })
-      .eq("id", bookingId);
-
-    if (updateError) {
-      setError(updateError.message);
+    const { error: rpcError } = await createClient().rpc("cancel_booking", {
+      p_booking_id: bookingId,
+    });
+    if (rpcError) {
+      setError(errorText(locale, rpcErrorCode(rpcError.message)));
       setCancelling(false);
       return;
     }
-
-    // Release the date hold so those nights become bookable again.
-    await supabase.from("availability_blocks").delete().eq("booking_id", bookingId);
-
     router.refresh();
   }
 
@@ -64,11 +65,9 @@ export function CancelBookingButton({
         disabled={cancelling}
         className="text-sm font-medium text-ink-secondary hover:text-red-600 disabled:opacity-60"
       >
-        {cancelling ? "Cancelling…" : "Cancel booking"}
+        {cancelling ? t.cancelling : t.button}
       </button>
-      {isLate && !cancelling && (
-        <p className="text-[11px] text-red-600">Within 3 days — deposit is forfeited</p>
-      )}
+      {isLate && !cancelling && <p className="text-[11px] text-red-600">{t.late}</p>}
       {error && <p className="text-xs text-red-600">{error}</p>}
     </div>
   );

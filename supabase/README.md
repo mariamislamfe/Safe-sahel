@@ -94,6 +94,30 @@ running them in order once is enough; there's no down-migration story yet.
   RLS, so the unread badge never actually cleared), and full replica
   identity so read-receipt ticks update live over Realtime.
 
+- `0017_booking_status_values.sql` — adds the `pending` / `expired` booking
+  statuses. **Run it on its own first** (Postgres can't use a new enum value
+  in the same transaction that adds it).
+- `0018_business_alignment.sql` — the trust / booking-request / subscription
+  / ID-security / analytics overhaul: request → confirm/decline/expire/cancel
+  RPCs (24h expiry, dates block only on confirm, strikes), publish gate (≥5
+  photos + price + verified owner or approved broker + coverage), owner &
+  broker verification with legal name, broker authorizations, private
+  `guest-ids` / `payment-proofs` buckets with no client read access, logged
+  60-second signed URLs, 30-day guest-ID retention, InstaPay payments →
+  subscriptions, featured slots (max 3/compound), season guarantee, listing
+  analytics, duplicate detection, focus compounds, and data cleanup (test
+  listings unpublished, "مراسي" merged into Marassi). Every data change is
+  recorded in `data_migration_log`.
+
+**Reverting 0018:** run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
+It restores the moved/unpublished rows from `data_migration_log` and drops
+everything 0018 added (export new tables first if you want to keep them).
+
+**Tests:** [`tests/migrations.test.mjs`](./tests/migrations.test.mjs) applies
+every migration to an in-process Postgres (PGlite) and checks ~75 business
+rules end to end, including the down → up round trip. See the header of the
+file for how to run it.
+
 Optionally also run [`seed.sql`](./seed.sql) for a handful of real North
 Coast compound names and a starter amenities catalog to develop against.
 

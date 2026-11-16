@@ -1,189 +1,118 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { formatEgp } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/server";
+import { getLocale } from "@/lib/locale";
+import { guestDict } from "@/lib/i18n/guest";
+import { common } from "@/lib/i18n/common";
+import { date, money } from "@/lib/i18n/format";
+import { expireStaleBookings } from "@/lib/queries/bookings";
 import { ReviewForm } from "@/components/review-form";
 import { CancelBookingButton } from "@/components/cancel-booking-button";
-
-const statusStyles: Record<string, string> = {
-  pending_payment: "bg-butter-soft text-ink",
-  confirmed: "bg-turquoise-light text-turquoise-dark",
-  declined: "bg-red-50 text-red-700",
-  cancelled: "bg-surface-soft text-ink-secondary",
-  completed: "bg-surface-soft text-ink-secondary",
-};
+import { BookingStatusBadge, ExpiryCountdown } from "@/components/booking-bits";
 
 export default async function GuestBookingsPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?redirect=/account/bookings");
+
+  await expireStaleBookings();
+  const locale = await getLocale();
+  const t = guestDict[locale].list;
+  const c = common[locale];
 
   const { data: bookings, error } = await supabase
     .from("bookings")
     .select(
-      "id, property_id, check_in, check_out, guests_count, total_amount, deposit_amount, status, cancellation_fee_amount",
+      "id, reference, property_id, check_in, check_out, nights, guests_count, total_amount, deposit_amount, status, expires_at",
     )
     .eq("guest_id", user.id)
     .order("created_at", { ascending: false });
   if (error) throw error;
 
-  const properties = new Map<string, { title: string; slug: string; ownerId: string }>();
-  const hostByOwnerId = new Map<string, { fullName: string | null; phone: string | null }>();
-  if (bookings && bookings.length > 0) {
-    const { data: rows } = await supabase
-      .from("properties")
-      .select("id, title, slug, owner_id")
-      .in(
-        "id",
-        bookings.map((b) => b.property_id),
-      );
-    for (const row of rows ?? [])
-      properties.set(row.id, { title: row.title, slug: row.slug, ownerId: row.owner_id });
-
-    const ownerIds = [...new Set((rows ?? []).map((r) => r.owner_id))];
-    if (ownerIds.length > 0) {
-      const { data: owners } = await supabase
-        .from("profiles")
-        .select("id, full_name, phone")
-        .in("id", ownerIds);
-      for (const o of owners ?? []) hostByOwnerId.set(o.id, { fullName: o.full_name, phone: o.phone });
-    }
-  }
-
-  const { data: reviewedRows } = await supabase
-    .from("reviews")
-    .select("booking_id")
-    .in(
-      "booking_id",
-      (bookings ?? []).map((b) => b.id),
-    );
-  const reviewedBookingIds = new Set((reviewedRows ?? []).map((r) => r.booking_id));
-
-  const { data: handoverRows } = await supabase
-    .from("booking_handovers")
-    .select("booking_id, status, deduction_amount, deduction_reason, refund_amount")
-    .in(
-      "booking_id",
-      (bookings ?? []).map((b) => b.id),
-    );
-  const handoverByBookingId = new Map((handoverRows ?? []).map((h) => [h.booking_id, h]));
-
+  const ids = (bookings ?? []).map((b) => b.id);
+  const [{ data: props }, { data: reviewed }] = await Promise.all([
+    ids.length
+      ? supabase
+          .from("properties")
+          .select("id, title, slug")
+          .in("id", [...new Set((bookings ?? []).map((b) => b.property_id))])
+      : Promise.resolve({ data: [] as { id: string; title: string; slug: string }[] }),
+    ids.length
+      ? supabase.from("reviews").select("booking_id").in("booking_id", ids)
+      : Promise.resolve({ data: [] as { booking_id: string }[] }),
+  ]);
+  const propertyById = new Map((props ?? []).map((p) => [p.id, p]));
+  const reviewedIds = new Set((reviewed ?? []).map((r) => r.booking_id));
   const today = new Date().toISOString().slice(0, 10);
 
   return (
     <main className="mx-auto flex max-w-3xl flex-col gap-lg px-lg py-2xl">
-      <h1 className="font-display text-2xl font-bold">Your bookings</h1>
+      <h1 className="font-display text-2xl font-bold">{t.title}</h1>
 
       {!bookings || bookings.length === 0 ? (
         <div className="flex flex-col items-center gap-sm rounded-lg border border-dashed border-border p-4xl text-center">
-          <p className="font-medium text-ink">No bookings yet</p>
+          <p className="font-medium text-ink">{t.empty}</p>
           <Link href="/search" className="text-sm font-medium text-turquoise-dark">
-            Browse properties
+            {t.browse}
           </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-md">
-          {bookings.map((booking) => {
-            const property = properties.get(booking.property_id);
+          {bookings.map((b) => {
+            const property = propertyById.get(b.property_id);
             const canReview =
-              booking.status === "confirmed" &&
-              booking.check_out < today &&
-              !reviewedBookingIds.has(booking.id);
-            const handover = handoverByBookingId.get(booking.id);
-            const host = property ? hostByOwnerId.get(property.ownerId) : undefined;
-
+              b.status === "confirmed" && b.check_out < today && !reviewedIds.has(b.id);
+            const cancellable =
+              (b.status === "pending" || b.status === "confirmed") && b.check_in > today;
             return (
-              <div
-                key={booking.id}
-                className="flex flex-col gap-sm rounded-lg border border-border p-md"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-md">
-                  <div className="flex flex-col gap-xs">
+              <div key={b.id} className="flex flex-col gap-sm rounded-xl border border-border p-md">
+                <div className="flex flex-wrap items-start justify-between gap-md">
+                  <div className="flex min-w-0 flex-col gap-xs">
                     <Link
-                      href={property ? `/properties/${property.slug}` : "#"}
+                      href={`/account/bookings/${b.id}`}
                       className="font-display font-semibold text-ink hover:text-turquoise-dark"
                     >
-                      {property?.title ?? "Property"}
+                      {property?.title ?? "—"}
                     </Link>
                     <p className="text-sm text-ink-secondary">
-                      {booking.check_in} → {booking.check_out} · {booking.guests_count} guests
+                      {date(locale, b.check_in)} → {date(locale, b.check_out)} ·{" "}
+                      {c.guests(b.guests_count)}
                     </p>
-                    <p className="text-sm font-medium text-ink">
-                      {formatEgp(Number(booking.total_amount))}
+                    <p className="text-sm text-ink">
+                      <span className="font-mono text-xs text-ink-secondary">{b.reference}</span> ·{" "}
+                      <span className="font-medium">{money(locale, Number(b.total_amount))}</span>
                     </p>
                   </div>
                   <div className="flex flex-col items-end gap-xs">
-                    <span
-                      className={`rounded-full px-sm py-xs text-xs font-medium capitalize ${statusStyles[booking.status]}`}
-                    >
-                      {booking.status.replace("_", " ")}
-                    </span>
-                    {(booking.status === "pending_payment" || booking.status === "confirmed") &&
-                      booking.check_in > today && (
-                        <CancelBookingButton
-                          bookingId={booking.id}
-                          checkIn={booking.check_in}
-                          depositAmount={Number(booking.deposit_amount)}
-                        />
-                      )}
-                  </div>
-                </div>
-
-                {booking.status === "confirmed" && (
-                  <div className="flex flex-wrap items-center gap-sm rounded-md bg-surface-soft px-md py-sm text-sm">
-                    <span className="text-ink-secondary">
-                      Host: {host?.fullName ?? "Safe Sahel user"}
-                    </span>
-                    {host?.phone ? (
-                      <span className="flex gap-sm">
-                        <a href={`tel:${host.phone}`} className="font-medium text-turquoise-dark">
-                          Call
-                        </a>
-                        <a
-                          href={`https://wa.me/${host.phone.replace(/\D/g, "").replace(/^0/, "20")}`}
-                          className="font-medium text-turquoise-dark"
-                        >
-                          WhatsApp
-                        </a>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-ink-secondary">No phone number added yet</span>
+                    <BookingStatusBadge status={b.status} />
+                    {b.status === "pending" && b.expires_at && (
+                      <ExpiryCountdown expiresAt={b.expires_at} />
                     )}
                   </div>
+                </div>
+                {b.status === "pending" && (
+                  <p className="text-sm text-ink-secondary">{t.pendingNote}</p>
                 )}
-
-                {booking.status === "cancelled" && Number(booking.cancellation_fee_amount) > 0 && (
-                  <p className="rounded-md bg-red-50 px-md py-sm text-xs text-red-700">
-                    Cancelled within 3 days of check-in — {formatEgp(Number(booking.cancellation_fee_amount))}{" "}
-                    deposit forfeited.
-                  </p>
-                )}
-
-                {handover && handover.status !== "pending" && (
-                  <div className="rounded-md bg-surface-soft px-md py-sm text-xs text-ink-secondary">
-                    {handover.status === "check_in_done" && "Check-in photos done — check-out is next."}
-                    {handover.status === "under_review" && "Check-out done — an admin is reviewing it."}
-                    {handover.status === "resolved" &&
-                      (Number(handover.deduction_amount) > 0 ? (
-                        <>
-                          Handover reviewed: {formatEgp(Number(handover.deduction_amount))} deducted
-                          {handover.deduction_reason && ` (${handover.deduction_reason})`} — refunded{" "}
-                          {formatEgp(Number(handover.refund_amount ?? 0))}.
-                        </>
-                      ) : (
-                        <>Handover reviewed — no deductions, full deposit refunded.</>
-                      ))}
-                  </div>
-                )}
-
+                <div className="flex flex-wrap items-center justify-between gap-sm">
+                  <Link
+                    href={`/account/bookings/${b.id}`}
+                    className="rounded-md bg-surface-soft px-md py-xs text-sm font-medium text-turquoise-dark hover:bg-turquoise-light"
+                  >
+                    {t.open} →
+                  </Link>
+                  {cancellable && (
+                    <CancelBookingButton
+                      bookingId={b.id}
+                      checkIn={b.check_in}
+                      depositAmount={Number(b.deposit_amount)}
+                      status={b.status}
+                    />
+                  )}
+                </div>
                 {canReview && (
-                  <ReviewForm
-                    bookingId={booking.id}
-                    propertyId={booking.property_id}
-                    guestId={user.id}
-                  />
+                  <ReviewForm bookingId={b.id} propertyId={b.property_id} guestId={user.id} />
                 )}
               </div>
             );

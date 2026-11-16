@@ -1,10 +1,15 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { formatEgp } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/server";
-import { ContactCard } from "@/components/contact-card";
+import { getLocale } from "@/lib/locale";
+import { guestDict } from "@/lib/i18n/guest";
+import { common } from "@/lib/i18n/common";
+import { date, money } from "@/lib/i18n/format";
+import { getBookingDetail } from "@/lib/queries/bookings";
+import { ExpiryCountdown } from "@/components/booking-bits";
 
-export default async function BookingConfirmationPage(
+/** Shown right after a request is sent — never says "booked". */
+export default async function BookingRequestSentPage(
   props: PageProps<"/booking/[id]/confirmation">,
 ) {
   const { id } = await props.params;
@@ -14,65 +19,45 @@ export default async function BookingConfirmationPage(
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: booking } = await supabase
-    .from("bookings")
-    .select("id, property_id, check_in, check_out, total_amount, deposit_amount, status")
-    .eq("id", id)
-    .eq("guest_id", user.id)
-    .maybeSingle();
+  const booking = await getBookingDetail(id);
+  if (!booking || booking.guestId !== user.id) notFound();
+  if (booking.status !== "pending") redirect(`/account/bookings/${id}`);
 
-  if (!booking) notFound();
-
-  const { data: property } = await supabase
-    .from("properties")
-    .select("title, slug, owner_id")
-    .eq("id", booking.property_id)
-    .maybeSingle();
-
-  const { data: owner } = property?.owner_id
-    ? await supabase.from("profiles").select("full_name, phone").eq("id", property.owner_id).maybeSingle()
-    : { data: null };
-
-  const nextSteps = [
-    {
-      title: "Contact the host directly",
-      body: "Call or WhatsApp them below to arrange the security deposit and your arrival time.",
-    },
-    {
-      title: "Pay at check-in",
-      body: `The deposit (${formatEgp(Number(booking.deposit_amount))}) plus the rest of the stay is settled directly with the host when you arrive.`,
-    },
-    {
-      title: "Check-in walkthrough",
-      body: "The host photographs the property's inventory with you there — proof everything's in order before your stay.",
-    },
-    {
-      title: "Check-out & deposit back",
-      body: "Same walkthrough on your way out. Once reviewed, your deposit is returned in full — minus anything genuinely missing or damaged.",
-    },
-  ];
+  const locale = await getLocale();
+  const t = guestDict[locale].sent;
+  const c = common[locale];
 
   return (
-    <main className="mx-auto flex max-w-lg flex-col items-center gap-lg px-lg py-4xl text-center">
-      <div className="flex size-12 items-center justify-center rounded-full bg-turquoise-light text-2xl text-turquoise-dark">
-        ✓
+    <main className="mx-auto flex max-w-lg flex-col items-center gap-lg px-lg py-3xl text-center">
+      <div className="flex size-14 items-center justify-center rounded-full bg-butter-soft text-2xl">
+        ⏳
       </div>
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">Booking confirmed!</h1>
+      <div className="flex flex-col gap-sm">
+        <h1 className="text-balance font-display text-2xl font-bold">{t.title}</h1>
+        <p className="text-ink-secondary">{t.body}</p>
+        {booking.expiresAt && (
+          <div>
+            <ExpiryCountdown expiresAt={booking.expiresAt} />
+          </div>
+        )}
+      </div>
+
+      <div className="w-full rounded-2xl border border-border p-lg text-start text-sm">
+        <p className="font-display font-semibold text-ink">{booking.propertyTitle}</p>
         <p className="text-ink-secondary">
-          {property?.title ?? "Your stay"} · {booking.check_in} → {booking.check_out} ·{" "}
-          {formatEgp(Number(booking.total_amount))} total
+          {date(locale, booking.checkIn)} → {date(locale, booking.checkOut)} ·{" "}
+          {c.nights(booking.nights)} · {c.guests(booking.guestsCount)}
+        </p>
+        <p className="mt-xs text-ink-secondary">
+          {c.bookingRef}:{" "}
+          <span className="font-mono font-semibold text-ink">{booking.reference}</span> ·{" "}
+          {money(locale, booking.totalAmount)}
         </p>
       </div>
 
-      <div className="w-full">
-        <ContactCard label="Your host" name={owner?.full_name ?? null} phone={owner?.phone ?? null} />
-      </div>
-
-      <div className="flex w-full flex-col gap-md rounded-2xl border border-border p-lg text-start">
-        <p className="font-display text-sm font-semibold text-ink">What happens next</p>
-        {nextSteps.map((step, i) => (
-          <div key={step.title} className="flex gap-md">
+      <ol className="flex w-full flex-col gap-md rounded-2xl border border-border p-lg text-start">
+        {t.steps.map((step, i) => (
+          <li key={step.title} className="flex gap-md">
             <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-turquoise-light text-xs font-bold text-turquoise-dark">
               {i + 1}
             </span>
@@ -80,17 +65,20 @@ export default async function BookingConfirmationPage(
               <p className="text-sm font-medium text-ink">{step.title}</p>
               <p className="text-xs text-ink-secondary">{step.body}</p>
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ol>
 
-      <div className="flex gap-md">
-        <Link href="/account/bookings" className="font-medium text-turquoise-dark">
-          View your bookings
+      <div className="flex flex-wrap justify-center gap-md">
+        <Link href={`/account/bookings/${booking.id}`} className="font-medium text-turquoise-dark">
+          {t.viewBooking}
         </Link>
-        {property?.slug && (
-          <Link href={`/properties/${property.slug}`} className="font-medium text-ink-secondary">
-            Back to property
+        {booking.propertySlug && (
+          <Link
+            href={`/properties/${booking.propertySlug}`}
+            className="font-medium text-ink-secondary"
+          >
+            {t.backToListing}
           </Link>
         )}
       </div>

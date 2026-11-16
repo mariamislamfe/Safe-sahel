@@ -1,81 +1,165 @@
-import Image from "next/image";
 import { createClient } from "@/lib/supabase/server";
-import { AdminVerificationActions } from "@/components/admin-verification-actions";
+import { getLocale } from "@/lib/locale";
+import { adminDict } from "@/lib/i18n/admin";
+import { common } from "@/lib/i18n/common";
+import { date } from "@/lib/i18n/format";
+import { hoursSince, profileMap, propertyMap } from "@/lib/queries/admin";
+import { DocumentViewButton } from "@/components/document-view-button";
+import { ReviewAuthorization, ReviewVerification } from "@/components/admin-actions";
 
-const statusStyles: Record<string, string> = {
-  pending: "bg-butter-soft text-ink",
-  contacted: "bg-turquoise-light text-turquoise-dark",
-  approved: "bg-turquoise-light text-turquoise-dark",
-  rejected: "bg-red-50 text-red-700",
-};
+function Age({
+  iso,
+  label,
+  overdue,
+}: {
+  iso: string;
+  label: (h: number) => string;
+  overdue: string;
+}) {
+  const h = hoursSince(iso);
+  return (
+    <span
+      className={`rounded-full px-sm py-0.5 text-xs font-semibold ${h >= 24 ? "bg-red-100 text-red-700" : h >= 12 ? "bg-butter-soft text-ink" : "bg-turquoise-light text-turquoise-dark"}`}
+    >
+      ⏱ {label(h)}
+      {h >= 24 && ` · ${overdue}`}
+    </span>
+  );
+}
 
 export default async function AdminVerificationPage() {
   const supabase = await createClient();
+  const locale = await getLocale();
+  const t = adminDict[locale].verification;
+  const c = common[locale];
 
-  const { data: requests } = await supabase
-    .from("verification_requests")
-    .select("id, profile_id, full_name, phone, sahel_location, id_document_url, status, created_at")
-    .order("created_at", { ascending: false });
+  const [{ data: requests }, { data: auths }, { data: recent }] = await Promise.all([
+    supabase
+      .from("verification_requests")
+      .select(
+        "id, profile_id, kind, full_name, phone, sahel_location, ownership_proof_path, ownership_proof_type, status, created_at",
+      )
+      .in("status", ["pending", "contacted"])
+      .order("created_at"),
+    supabase
+      .from("broker_authorizations")
+      .select("id, property_id, broker_id, owner_full_name, owner_phone, status, created_at")
+      .eq("status", "pending")
+      .order("created_at"),
+    supabase
+      .from("verification_requests")
+      .select("id, full_name, kind, status, rejection_reason, reviewed_at")
+      .in("status", ["approved", "rejected"])
+      .order("reviewed_at", { ascending: false })
+      .limit(10),
+  ]);
 
-  const withSignedUrls = await Promise.all(
-    (requests ?? []).map(async (r) => {
-      const { data } = await supabase.storage
-        .from("verification-documents")
-        .createSignedUrl(r.id_document_url, 60 * 10);
-      return { ...r, signedIdUrl: data?.signedUrl ?? null };
-    }),
-  );
+  const [brokers, properties] = await Promise.all([
+    profileMap((auths ?? []).map((a) => a.broker_id)),
+    propertyMap((auths ?? []).map((a) => a.property_id)),
+  ]);
 
   return (
-    <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">Verification requests</h1>
+    <div className="flex flex-col gap-2xl">
+      <div className="flex flex-col gap-xs">
+        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
+        <p className="text-sm text-ink-secondary">{t.target}</p>
+      </div>
 
-      {withSignedUrls.length === 0 ? (
-        <p className="text-sm text-ink-secondary">No requests yet.</p>
-      ) : (
-        <div className="flex flex-col gap-md">
-          {withSignedUrls.map((request) => (
+      <section className="flex flex-col gap-md">
+        <h2 className="font-display text-lg font-semibold">
+          {t.owners} ({requests?.length ?? 0})
+        </h2>
+        {(requests ?? []).length === 0 ? (
+          <p className="text-sm text-ink-secondary">{t.empty}</p>
+        ) : (
+          (requests ?? []).map((r) => (
             <div
-              key={request.id}
-              className="flex flex-col gap-md rounded-lg border border-border p-lg sm:flex-row"
+              key={r.id}
+              className="flex flex-col gap-md rounded-2xl border border-border p-lg md:flex-row md:justify-between"
             >
-              {request.signedIdUrl && (
-                <div className="relative h-40 w-full flex-none overflow-hidden rounded-md border border-border sm:w-56">
-                  <Image
-                    src={request.signedIdUrl}
-                    alt="ID document"
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-              )}
-              <div className="flex flex-1 flex-col gap-xs">
-                <div className="flex flex-wrap items-center justify-between gap-sm">
-                  <p className="font-display font-semibold text-ink">{request.full_name}</p>
-                  <span
-                    className={`rounded-full px-sm py-xs text-xs font-medium capitalize ${statusStyles[request.status]}`}
-                  >
-                    {request.status}
+              <div className="flex flex-col gap-xs">
+                <div className="flex flex-wrap items-center gap-sm">
+                  <p className="font-display font-semibold">{r.full_name}</p>
+                  <span className="rounded-full bg-surface-soft px-sm py-0.5 text-xs">
+                    {t.kind[r.kind]}
                   </span>
+                  <Age iso={r.created_at} label={t.submittedAgo} overdue={t.overdue} />
                 </div>
-                <p className="text-sm text-ink-secondary">{request.phone}</p>
-                <p className="text-sm text-ink-secondary">{request.sahel_location}</p>
-                <p className="text-xs text-ink-secondary">
-                  Requested {new Date(request.created_at).toLocaleDateString()}
+                <p className="text-sm text-ink-secondary" dir="ltr">
+                  {r.phone}
+                  {r.sahel_location && ` · ${r.sahel_location}`}
                 </p>
-                {(request.status === "pending" || request.status === "contacted") && (
-                  <div className="mt-sm">
-                    <AdminVerificationActions
-                      requestId={request.id}
-                      profileId={request.profile_id}
+                <div className="flex flex-wrap gap-sm">
+                  <DocumentViewButton kind="verification_id" id={r.id} label={t.id} />
+                  {r.ownership_proof_path && (
+                    <DocumentViewButton
+                      kind="verification_proof"
+                      id={r.id}
+                      label={`${t.proof}${r.ownership_proof_type ? ` · ${t.proofTypes[r.ownership_proof_type]}` : ""}`}
                     />
-                  </div>
-                )}
+                  )}
+                </div>
+                <p className="text-xs text-ink-secondary">{c.documentNote}</p>
+              </div>
+              <div className="md:w-72">
+                <ReviewVerification requestId={r.id} defaultName={r.full_name} />
               </div>
             </div>
+          ))
+        )}
+      </section>
+
+      <section className="flex flex-col gap-md">
+        <h2 className="font-display text-lg font-semibold">
+          {t.brokerAuth} ({auths?.length ?? 0})
+        </h2>
+        {(auths ?? []).length === 0 ? (
+          <p className="text-sm text-ink-secondary">{t.empty}</p>
+        ) : (
+          (auths ?? []).map((a) => (
+            <div
+              key={a.id}
+              className="flex flex-col gap-sm rounded-2xl border border-border p-lg md:flex-row md:items-center md:justify-between"
+            >
+              <div className="flex flex-col gap-xs text-sm">
+                <div className="flex flex-wrap items-center gap-sm">
+                  <span className="font-semibold">
+                    {properties.get(a.property_id)?.title ?? "—"}
+                  </span>
+                  <Age iso={a.created_at} label={t.submittedAgo} overdue={t.overdue} />
+                </div>
+                <span className="text-ink-secondary">
+                  {t.kind.broker}: {brokers.get(a.broker_id)?.name ?? "—"} · {t.ownerName}:{" "}
+                  {a.owner_full_name}
+                  {a.owner_phone && <span dir="ltr"> · {a.owner_phone}</span>}
+                </span>
+                <DocumentViewButton kind="broker_authorization" id={a.id} label={t.authDoc} />
+              </div>
+              <ReviewAuthorization id={a.id} />
+            </div>
+          ))
+        )}
+      </section>
+
+      <section className="flex flex-col gap-sm">
+        <h2 className="font-display text-lg font-semibold">{t.recent}</h2>
+        <ul className="flex flex-col divide-y divide-border text-sm">
+          {(recent ?? []).map((r) => (
+            <li key={r.id} className="flex flex-wrap justify-between gap-sm py-xs">
+              <span>
+                {r.full_name} · {t.kind[r.kind]}
+                {r.rejection_reason && (
+                  <span className="text-xs text-red-700"> — {r.rejection_reason}</span>
+                )}
+              </span>
+              <span className="text-xs text-ink-secondary">
+                {c.reviewStatus[r.status]} · {date(locale, r.reviewed_at)}
+              </span>
+            </li>
           ))}
-        </div>
-      )}
+        </ul>
+      </section>
     </div>
   );
 }

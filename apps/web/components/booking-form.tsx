@@ -1,12 +1,16 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { formatEgp } from "@safe-sahel/utils";
+import { useRouter, usePathname } from "next/navigation";
+import { rpcErrorCode } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 import type { DateRange } from "@/lib/queries/availability";
 import { DateRangeCalendar } from "@/components/date-range-calendar";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { guestDict } from "@/lib/i18n/guest";
+import { common, errorText } from "@/lib/i18n/common";
+import { money } from "@/lib/i18n/format";
 
 function daysBetween(a: string, b: string) {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86_400_000);
@@ -16,6 +20,10 @@ function rangesOverlap(checkIn: string, checkOut: string, blocked: DateRange[]) 
   return blocked.some((r) => checkIn < r.end && checkOut > r.start);
 }
 
+/**
+ * Sends a booking REQUEST (status pending). Dates are only blocked when the
+ * owner confirms — request_booking() computes the price server-side.
+ */
 export function BookingForm({
   propertyId,
   pricePerNight,
@@ -30,32 +38,48 @@ export function BookingForm({
   unavailableRanges: DateRange[];
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const locale = useLocale();
+  const t = guestDict[locale].form;
+  const c = common[locale];
   const { profile, loading } = useCurrentProfile();
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [guests, setGuests] = useState(1);
+  const [adults, setAdults] = useState(1);
+  const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const nights = checkIn && checkOut ? daysBetween(checkIn, checkOut) : 0;
   const basePrice = nights > 0 ? nights * pricePerNight : 0;
-  // Deposit is a flat half of one night's price, not a percentage of the
-  // whole stay — matches the actual North Coast convention this models.
+  // Deposit convention: half of one night (matches request_booking()).
   const depositAmount = nights > 0 ? Math.round(pricePerNight / 2) : 0;
-  const totalAmount = basePrice + depositAmount;
 
   const validationError = useMemo(() => {
     if (!checkIn || !checkOut) return null;
-    if (nights <= 0) return "Check-out must be after check-in.";
-    if (nights < minStayNights) return `Minimum stay is ${minStayNights} night(s).`;
-    if (guests > maxGuests) return `This property sleeps up to ${maxGuests} guests.`;
-    if (rangesOverlap(checkIn, checkOut, unavailableRanges)) return "Those dates aren't available.";
+    if (nights <= 0) return c.errors.invalid_dates!;
+    if (nights < minStayNights) return t.minStay(minStayNights);
+    if (guests > maxGuests) return t.maxGuests(maxGuests);
+    if (adults < 1 || adults > guests) return c.errors.invalid_adults!;
+    if (rangesOverlap(checkIn, checkOut, unavailableRanges)) return t.unavailable;
     return null;
-  }, [checkIn, checkOut, nights, guests, minStayNights, maxGuests, unavailableRanges]);
+  }, [
+    checkIn,
+    checkOut,
+    nights,
+    guests,
+    adults,
+    minStayNights,
+    maxGuests,
+    unavailableRanges,
+    t,
+    c,
+  ]);
 
   async function submit() {
     if (!profile) {
-      router.push(`/login?redirect=/properties`);
+      router.push(`/login?redirect=${encodeURIComponent(pathname ?? "/")}`);
       return;
     }
     if (validationError || nights <= 0) return;
@@ -63,62 +87,31 @@ export function BookingForm({
     setSubmitting(true);
     setError(null);
     const supabase = createClient();
-
-    // Books instantly — no owner approval step. The exclusion constraint on
-    // availability_blocks (below) already guarantees two guests can never
-    // hold the same dates, so there's nothing left for a manual "confirm"
-    // to gate.
-    const { data: booking, error: bookingError } = await supabase
-      .from("bookings")
-      .insert({
-        property_id: propertyId,
-        guest_id: profile.id,
-        check_in: checkIn,
-        check_out: checkOut,
-        guests_count: guests,
-        nights,
-        base_price: basePrice,
-        deposit_amount: depositAmount,
-        total_amount: totalAmount,
-        status: "confirmed",
-      })
-      .select("id")
-      .single();
-
-    if (bookingError || !booking) {
-      setError(bookingError?.message ?? "Could not create booking.");
-      setSubmitting(false);
-      return;
-    }
-
-    const { error: blockError } = await supabase.from("availability_blocks").insert({
-      property_id: propertyId,
-      range: `[${checkIn},${checkOut})`,
-      reason: "booked",
-      booking_id: booking.id,
+    const { data, error: rpcError } = await supabase.rpc("request_booking", {
+      p_property_id: propertyId,
+      p_check_in: checkIn,
+      p_check_out: checkOut,
+      p_guests: guests,
+      p_adults: adults,
+      p_note: note || null,
     });
 
-    if (blockError) {
-      // Someone else booked these dates in the meantime — the exclusion
-      // constraint caught it. Undo the booking row and let the guest retry.
-      await supabase.from("bookings").delete().eq("id", booking.id);
-      setError("Those dates were just booked by someone else — try different dates.");
+    if (rpcError || !data?.[0]) {
+      setError(errorText(locale, rpcErrorCode(rpcError?.message)));
       setSubmitting(false);
       return;
     }
-
-    router.push(`/booking/${booking.id}/confirmation`);
+    router.push(`/booking/${data[0].booking_id}/confirmation`);
   }
+
+  const inputClass =
+    "w-full rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise";
 
   return (
     <div className="flex flex-col gap-md">
       <div className="flex flex-col gap-xs">
         <span className="text-sm font-medium text-ink">
-          {!checkIn
-            ? "Select check-in date"
-            : !checkOut
-              ? "Now select check-out date"
-              : "Your stay"}
+          {!checkIn ? t.selectCheckIn : !checkOut ? t.selectCheckOut : t.yourStay}
         </span>
         <DateRangeCalendar
           checkIn={checkIn}
@@ -131,33 +124,63 @@ export function BookingForm({
         />
       </div>
 
+      <div className="grid grid-cols-2 gap-sm">
+        <label className="flex flex-col gap-xs">
+          <span className="text-sm font-medium text-ink">{t.guests}</span>
+          <input
+            type="number"
+            min={1}
+            max={maxGuests}
+            value={guests}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              setGuests(n);
+              if (adults > n) setAdults(Math.max(1, n));
+            }}
+            className={inputClass}
+          />
+        </label>
+        <label className="flex flex-col gap-xs">
+          <span className="text-sm font-medium text-ink">{t.adults}</span>
+          <input
+            type="number"
+            min={1}
+            max={guests}
+            value={adults}
+            onChange={(e) => setAdults(Number(e.target.value))}
+            className={inputClass}
+          />
+        </label>
+      </div>
+      <p className="-mt-xs text-xs text-ink-secondary">{t.adultsHint}</p>
+
       <label className="flex flex-col gap-xs">
-        <span className="text-sm font-medium text-ink">Guests</span>
-        <input
-          type="number"
-          min={1}
-          max={maxGuests}
-          value={guests}
-          onChange={(e) => setGuests(Number(e.target.value))}
-          className="w-24 rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+        <span className="text-sm font-medium text-ink">{t.note}</span>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          maxLength={500}
+          placeholder={t.notePlaceholder}
+          className={inputClass}
         />
       </label>
 
       {nights > 0 && (
         <div className="flex flex-col gap-xs rounded-md bg-surface-soft p-md text-sm">
-          <div className="flex justify-between">
+          <div className="flex justify-between gap-md">
             <span className="text-ink-secondary">
-              {formatEgp(pricePerNight)} × {nights} night{nights > 1 ? "s" : ""}
+              {t.priceLine(money(locale, pricePerNight), c.nights(nights))}
             </span>
-            <span>{formatEgp(basePrice)}</span>
+            <span>{money(locale, basePrice)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-ink-secondary">Security deposit (half a night)</span>
-            <span>{formatEgp(depositAmount)}</span>
+          <div className="flex justify-between gap-md">
+            <span className="text-ink-secondary">{t.deposit}</span>
+            <span>{money(locale, depositAmount)}</span>
           </div>
           <div className="flex justify-between border-t border-border pt-xs font-medium text-ink">
-            <span>Total</span>
-            <span>{formatEgp(totalAmount)}</span>
+            <span>{t.total}</span>
+            <span>{money(locale, basePrice + depositAmount)}</span>
           </div>
         </div>
       )}
@@ -168,17 +191,14 @@ export function BookingForm({
 
       <button
         onClick={submit}
-        disabled={submitting || loading || !checkIn || !checkOut || !!validationError}
+        disabled={
+          submitting || loading || (!!profile && (!checkIn || !checkOut || !!validationError))
+        }
         className="rounded-md bg-turquoise px-xl py-md font-medium text-white hover:bg-turquoise-dark disabled:opacity-60"
       >
-        {submitting ? "Booking…" : profile ? "Book now" : "Log in to book"}
+        {submitting ? t.sending : profile ? t.send : t.login}
       </button>
-      <p className="text-xs text-ink-secondary">
-        Your dates are booked the moment you confirm — no waiting on the host. Message them to
-        arrange the security deposit and check-in; the rest is paid directly to the host at
-        check-in. Online payment collection is coming soon. You can cancel any time up to 3 days
-        before check-in for a full refund — cancelling closer to your stay forfeits the deposit.
-      </p>
+      <p className="text-xs leading-relaxed text-ink-secondary">{t.explainer}</p>
     </div>
   );
 }

@@ -20,7 +20,7 @@ export default async function PropertyPhotosPage(
 
   return (
     <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">Photos — {property.title}</h1>
+      <h1 className="font-display text-2xl font-bold">📷 {property.title}</h1>
       <PropertyPhotoUploader propertyId={property.id} ownerId={user.id} initialImages={images} />
     </div>
   );
