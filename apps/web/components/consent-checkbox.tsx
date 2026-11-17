@@ -28,6 +28,10 @@ export function ConsentCheckbox({
         {t.consentLabel}{" "}
         <Link href="/privacy" target="_blank" className="font-medium text-turquoise-dark underline">
           {t.privacyPolicy}
+        </Link>{" "}
+        {t.andThe}{" "}
+        <Link href="/terms" target="_blank" className="font-medium text-turquoise-dark underline">
+          {t.termsLink}
         </Link>
         .
       </span>

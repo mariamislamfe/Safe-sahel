@@ -16,12 +16,12 @@ export default async function OwnerLayout({ children }: LayoutProps<"/owner">) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role, host_type, verified")
+    .select("full_name, role, host_type, verified, phone")
     .eq("id", user.id)
     .single();
 
   if (profile?.role !== "owner" && profile?.role !== "admin") {
-    return <BecomeHost profileId={user.id} />;
+    return <BecomeHost profileId={user.id} phone={profile?.phone ?? null} />;
   }
 
   const locale = await getLocale();

@@ -713,3 +713,6 @@ grant execute on function public.my_admin_access() to authenticated;
 grant execute on function public.admin_upsert_staff(text, text, text[]) to authenticated;
 grant execute on function public.admin_set_staff_active(uuid, boolean) to authenticated;
 grant execute on function public.admin_list_staff() to authenticated;
+
+-- Make the new functions visible to the API immediately.
+notify pgrst, 'reload schema';

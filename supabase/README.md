@@ -116,8 +116,12 @@ running them in order once is enough; there's no down-migration story yet.
   RPCs. Settings/prices, team management and guest ID documents stay
   founder-only. Manage it from **Admin → Team & roles**. Requires 0018.
   Revert with [`down/0019_staff_roles.down.sql`](./migrations/down/0019_staff_roles.down.sql).
+- `0020_signup_phone_and_terms.sql` — copies the signup phone (normalized) and
+  accepted terms version into `profiles`, and adds the `missing_phone` publish
+  blocker (hosts need a WhatsApp number). Revert with
+  [`down/0020_signup_phone_and_terms.down.sql`](./migrations/down/0020_signup_phone_and_terms.down.sql).
 
-**Reverting 0018:** (revert 0019 first) run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
+**Reverting 0018:** (revert 0020, then 0019 first) run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
 It restores the moved/unpublished rows from `data_migration_log` and drops
 everything 0018 added (export new tables first if you want to keep them).
 

@@ -40,6 +40,8 @@ const en = {
   consentLabel:
     "I agree that Safe Sahel stores this document privately to verify identity / issue gate passes, as described in the",
   privacyPolicy: "Privacy policy",
+  termsLink: "Terms & conditions",
+  andThe: "and the",
   consentRequired: "Please tick the consent box first.",
   fileTooLarge: "File is too large (max 10 MB).",
   fileTypeNotAllowed: "Use a JPG, PNG, WEBP, HEIC or PDF file.",
@@ -79,6 +81,7 @@ const en = {
   blockers: {
     min_photos: "Add at least 5 photos",
     missing_price: "Set a nightly price",
+    missing_phone: "Add your WhatsApp number in your profile",
     owner_not_verified: "Verify your ID + proof of ownership",
     broker_not_approved: "Get approved as a broker",
     missing_authorization: "Upload the owner's authorization for this listing",
@@ -185,6 +188,8 @@ const ar: typeof en = {
   consentLabel:
     "موافق إن Safe Sahel تحتفظ بالمستند ده بشكل خاص للتحقق من الهوية / استخراج تصاريح البوابة، زي ما هو موضّح في",
   privacyPolicy: "سياسة الخصوصية",
+  termsLink: "الشروط والأحكام",
+  andThe: "و",
   consentRequired: "علّم على خانة الموافقة الأول.",
   fileTooLarge: "الملف كبير (أقصى حجم ١٠ ميجا).",
   fileTypeNotAllowed: "استخدم ملف JPG أو PNG أو WEBP أو HEIC أو PDF.",
@@ -224,6 +229,7 @@ const ar: typeof en = {
   blockers: {
     min_photos: "ضيف ٥ صور على الأقل",
     missing_price: "حط سعر الليلة",
+    missing_phone: "ضيف رقم الواتساب في البروفايل",
     owner_not_verified: "وثّق بطاقتك وإثبات الملكية",
     broker_not_approved: "لازم تتعتمد كوسيط",
     missing_authorization: "ارفع تفويض المالك للشاليه ده",

@@ -1,4 +1,4 @@
-// Database integration tests for migrations 0001–0019 (+ down/up round trip),
+// Database integration tests for migrations 0001–0020 (+ down/up round trip),
 // run against PGlite (WASM Postgres) with stubbed Supabase auth/storage schemas.
 //
 //   mkdir /tmp/pg && cd /tmp/pg && npm i @electric-sql/pglite@0.2.17
@@ -834,7 +834,69 @@ insert into public.availability_blocks (property_id, range, reason, booking_id) 
     "founder lists team with emails",
   );
 
+  console.log("\n== 0020 signup phone + terms ==");
+  await exec(fs.readFileSync(path.join(MIG, "0020_signup_phone_and_terms.sql"), "utf8"), "0020");
+  const P = {
+    eg: "c0000000-0000-0000-0000-000000000001",
+    intl: "c0000000-0000-0000-0000-000000000002",
+    bad: "c0000000-0000-0000-0000-000000000003",
+    plus20: "c0000000-0000-0000-0000-000000000004",
+  };
+  await exec(
+    `insert into auth.users (id, email, raw_user_meta_data) values
+     ('${P.eg}', 'p1@x', '{"full_name":"Host","role":"owner","phone":" 010 1234-5678","terms_version":"t1","terms_accepted_at":"2026-11-18T10:00:00Z"}'),
+     ('${P.intl}', 'p2@x', '{"full_name":"Tourist","phone":"+447700900123"}'),
+     ('${P.bad}', 'p3@x', '{"full_name":"Typo","phone":"abc123","terms_accepted_at":"not-a-date","terms_version":"t1"}'),
+     ('${P.plus20}', 'p4@x', '{"full_name":"Plus","phone":"+201112223334"}');`,
+    "0020 signups",
+  );
+  rows = await q(
+    `select id, phone, role::text as role, terms_version, terms_accepted_at from profiles where id in ('${P.eg}','${P.intl}','${P.bad}','${P.plus20}')`,
+  );
+  const byId = Object.fromEntries(rows.map((r) => [r.id, r]));
+  ok(
+    byId[P.eg].phone === "01012345678" && byId[P.eg].role === "owner",
+    "Egyptian number normalized",
+  );
+  ok(
+    byId[P.eg].terms_version === "t1" && byId[P.eg].terms_accepted_at !== null,
+    "terms acceptance recorded",
+  );
+  ok(byId[P.intl].phone === "+447700900123", "international number kept");
+  ok(byId[P.plus20].phone === "01112223334", "+20 number normalized to 01…");
+  ok(
+    byId[P.bad].phone === null && byId[P.bad].terms_accepted_at !== null,
+    "invalid phone/date don't break signup",
+  );
+  ok(
+    (await q(`select listing_blockers(gen_random_uuid(), '${P.bad}', 100) b`))[0].b.includes(
+      "missing_phone",
+    ),
+    "owner without phone gets missing_phone blocker",
+  );
+  ok(
+    !(await q(`select listing_blockers(gen_random_uuid(), '${P.eg}', 100) b`))[0].b.includes(
+      "missing_phone",
+    ),
+    "owner with phone has no missing_phone blocker",
+  );
+  await expectError(
+    as(U.owner, () => q(`select listing_blockers(gen_random_uuid(), '${U.owner}', 100)`)),
+    "permission denied",
+    "listing_blockers stays locked for clients",
+  );
+
   console.log("\n== Down migration, then up again ==");
+  await exec(
+    fs.readFileSync(path.join(MIG, "down", "0020_signup_phone_and_terms.down.sql"), "utf8"),
+    "down 0020",
+  );
+  ok(
+    !(await q(`select listing_blockers(gen_random_uuid(), '${P.bad}', 100) b`))[0].b.includes(
+      "missing_phone",
+    ),
+    "after 0020 down, publish rules are back to 0018",
+  );
   await exec(
     fs.readFileSync(path.join(MIG, "down", "0019_staff_roles.down.sql"), "utf8"),
     "down 0019",
@@ -862,6 +924,11 @@ insert into public.availability_blocks (property_id, range, reason, booking_id) 
   ok(true, "0018 re-applies cleanly after down");
   await exec(fs.readFileSync(path.join(MIG, "0019_staff_roles.sql"), "utf8"), "0019 re-apply");
   ok(true, "0019 re-applies cleanly after down");
+  await exec(
+    fs.readFileSync(path.join(MIG, "0020_signup_phone_and_terms.sql"), "utf8"),
+    "0020 re-apply",
+  );
+  ok(true, "0020 re-applies cleanly after down");
 } catch (e) {
   console.log("UNHANDLED:", e.message, "|", e.where);
   failures++;

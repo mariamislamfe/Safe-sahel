@@ -27,6 +27,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
       links: [
         { href: "https://wa.me/201123094983", label: "WhatsApp: 01123094983", external: true },
         { href: "/profile", label: t.account },
+        { href: "/terms", label: locale === "ar" ? "الشروط والأحكام" : "Terms & conditions" },
         { href: "/privacy", label: locale === "ar" ? "سياسة الخصوصية" : "Privacy policy" },
       ],
     },

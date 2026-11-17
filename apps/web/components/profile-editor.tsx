@@ -8,6 +8,8 @@ import type { CurrentProfile } from "@/lib/hooks/use-current-profile";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { dashboardDict } from "@/lib/i18n/dashboard";
 import { useFeedback } from "@/components/feedback";
+import { isValidPhone, normalizePhone } from "@safe-sahel/validation";
+import { authDict } from "@/lib/i18n/auth";
 
 export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
   const router = useRouter();
@@ -51,13 +53,21 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
   }
 
   async function saveProfile() {
-    setSavingProfile(true);
     setError(null);
     setSaved(false);
+    const isHost = profile.role === "owner" || profile.role === "admin";
+    const errs = authDict[locale].errors;
+    if (!phone.trim() && isHost) return setError(errs.phone_required!);
+    if (phone.trim() && !isValidPhone(phone)) return setError(errs.phone_invalid!);
+    setSavingProfile(true);
     const supabase = createClient();
     const { error: updateError } = await supabase
       .from("profiles")
-      .update({ full_name: fullName || null, username: username || null, phone: phone || null })
+      .update({
+        full_name: fullName || null,
+        username: username || null,
+        phone: normalizePhone(phone),
+      })
       .eq("id", profile.id);
 
     setSavingProfile(false);
