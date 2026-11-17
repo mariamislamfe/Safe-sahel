@@ -332,7 +332,7 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
         </div>
 
         {/* Booking card */}
-        <div className="lg:col-span-1">
+        <div id="book" className="scroll-mt-20 lg:col-span-1">
           <div className="sticky top-24 flex flex-col gap-md rounded-2xl border border-border bg-surface p-lg shadow-lg shadow-ink/5">
             <p className="font-display text-2xl font-bold text-ink">
               {money(locale, property.pricePerNight)}{" "}
@@ -368,6 +368,21 @@ export default async function PropertyDetailPage(props: PageProps<"/properties/[
           </div>
         </div>
       </div>
+
+      {/* Phones: the booking card sits far below the photos — keep the price and CTA in reach. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-md border-t border-border bg-surface/95 px-lg py-sm pb-[calc(env(safe-area-inset-bottom)+0.5rem)] backdrop-blur lg:hidden">
+        <p className="font-display text-lg font-bold">
+          {money(locale, property.pricePerNight)}{" "}
+          <span className="text-sm font-normal text-ink-secondary">{g.perNight}</span>
+        </p>
+        <a
+          href="#book"
+          className="rounded-xl bg-turquoise px-lg py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-turquoise-dark"
+        >
+          {guestDict[locale].form.send}
+        </a>
+      </div>
+      <div className="h-20 lg:hidden" aria-hidden />
     </main>
   );
 }

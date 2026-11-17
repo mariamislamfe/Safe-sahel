@@ -2,12 +2,33 @@ import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { adminDict } from "@/lib/i18n/admin";
 import { date } from "@/lib/i18n/format";
+import { requireSection } from "@/lib/admin-access";
 import { compoundList } from "@/lib/queries/admin";
 import { getPlatformSetting } from "@/lib/queries/owner-dashboard";
+import {
+  Card,
+  PageHeader,
+  Pill,
+  Section,
+  Table,
+  Td,
+  Th,
+  Tr,
+  type PillTone,
+} from "@/components/admin/ui";
 
 type Target = { total: number; milestones: { date: string; count: number }[] };
+type MilestoneState = "hit" | "behind" | "onTrack" | "upcoming";
+
+const TONE: Record<MilestoneState, PillTone> = {
+  hit: "success",
+  behind: "danger",
+  onTrack: "info",
+  upcoming: "neutral",
+};
 
 export default async function AdminTargetsPage() {
+  await requireSection("targets");
   const supabase = await createClient();
   const locale = await getLocale();
   const t = adminDict[locale].targets;
@@ -35,15 +56,13 @@ export default async function AdminTargetsPage() {
   const last = target.milestones[target.milestones.length - 1];
 
   return (
-    <div className="flex flex-col gap-xl">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">
-          {t.body(target.total, last ? date(locale, last.date) : "—")}
-        </p>
-      </div>
+    <>
+      <PageHeader
+        title={t.title}
+        description={t.body(target.total, last ? date(locale, last.date) : "—")}
+      />
 
-      <div className="flex flex-col gap-sm rounded-3xl bg-ink p-lg text-white">
+      <div className="flex flex-col gap-md rounded-3xl bg-ink p-xl text-white shadow-lg">
         <p className="text-sm text-white/70">{t.current}</p>
         <p className="font-display text-5xl font-extrabold tabular-nums">
           {current}
@@ -64,82 +83,69 @@ export default async function AdminTargetsPage() {
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-border">
-        <table className="w-full min-w-[480px] text-sm">
-          <thead className="bg-surface-soft text-ink-secondary">
-            <tr>
-              <th className="p-md text-start font-medium">{t.milestone}</th>
-              <th className="p-md text-start font-medium">{t.due}</th>
-              <th className="p-md text-end font-medium">{t.target}</th>
-              <th className="p-md text-start font-medium">{t.status}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {target.milestones.map((m, i) => {
-              const status =
-                current >= m.count
-                  ? "hit"
-                  : m.date < today
-                    ? "behind"
-                    : m === nextMilestone
+      <Table minWidth={480}>
+        <thead>
+          <tr>
+            <Th>{t.milestone}</Th>
+            <Th>{t.due}</Th>
+            <Th end>{t.target}</Th>
+            <Th>{t.status}</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {target.milestones.map((m, i) => {
+            const state: MilestoneState =
+              current >= m.count
+                ? "hit"
+                : m.date < today
+                  ? "behind"
+                  : m === nextMilestone
+                    ? current >= m.count * 0.5
                       ? "onTrack"
-                      : "upcoming";
-              const style = {
-                hit: "text-turquoise-dark",
-                behind: "text-red-600",
-                onTrack: "text-ink",
-                upcoming: "text-ink-secondary",
-              }[status];
-              return (
-                <tr key={m.date} className="border-t border-border">
-                  <td className="p-md">#{i + 1}</td>
-                  <td className="p-md">{date(locale, m.date)}</td>
-                  <td className="p-md text-end tabular-nums">{m.count}</td>
-                  <td className={`p-md font-medium ${style}`}>
-                    {status === "onTrack"
-                      ? current >= m.count * 0.5
-                        ? t.onTrack
-                        : t.behind
-                      : t[status as "hit" | "behind" | "upcoming"]}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+                      : "behind"
+                    : "upcoming";
+            return (
+              <Tr key={m.date}>
+                <Td className="font-medium">#{i + 1}</Td>
+                <Td>{date(locale, m.date)}</Td>
+                <Td end className="tabular-nums">
+                  {m.count}
+                </Td>
+                <Td>
+                  <Pill tone={TONE[state]}>{t[state]}</Pill>
+                </Td>
+              </Tr>
+            );
+          })}
+        </tbody>
+      </Table>
 
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.perCompound}</h2>
+      <Section title={t.perCompound} description={`${t.otherCompounds}: ${current - focusTotal}`}>
         <div className="grid grid-cols-1 gap-sm sm:grid-cols-2 lg:grid-cols-5">
           {focus.map((c) => {
             const n = byCompound.get(c.id) ?? 0;
             return (
-              <div
-                key={c.id}
-                className="flex flex-col gap-xs rounded-2xl border border-border p-md"
-              >
-                <p className="text-sm font-semibold">
-                  {locale === "ar" && c.name_ar ? c.name_ar : c.name}
-                </p>
-                <p className="font-display text-2xl font-bold tabular-nums">
-                  {n}
-                  <span className="text-sm text-ink-secondary"> / {perCompoundTarget}</span>
-                </p>
-                <div className="h-2 overflow-hidden rounded-full bg-surface-soft">
-                  <div
-                    className="h-full rounded-full bg-turquoise"
-                    style={{ width: `${Math.min(100, (n / perCompoundTarget) * 100)}%` }}
-                  />
+              <Card key={c.id}>
+                <div className="flex flex-col gap-xs">
+                  <p className="text-sm font-semibold">
+                    {locale === "ar" && c.name_ar ? c.name_ar : c.name}
+                  </p>
+                  <p className="font-display text-2xl font-bold tabular-nums">
+                    {n}
+                    <span className="text-sm text-ink-secondary"> / {perCompoundTarget}</span>
+                  </p>
+                  <div className="h-2 overflow-hidden rounded-full bg-surface-soft">
+                    <div
+                      className="h-full rounded-full bg-turquoise"
+                      style={{ width: `${Math.min(100, (n / perCompoundTarget) * 100)}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
+              </Card>
             );
           })}
         </div>
-        <p className="text-sm text-ink-secondary">
-          {t.otherCompounds}: {current - focusTotal}
-        </p>
-      </section>
-    </div>
+      </Section>
+    </>
   );
 }

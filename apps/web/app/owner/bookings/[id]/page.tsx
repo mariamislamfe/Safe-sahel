@@ -17,13 +17,15 @@ import { WhatsAppButton } from "@/components/whatsapp-button";
 import { DocumentViewButton } from "@/components/document-view-button";
 import { CheckinChecklist } from "@/components/checkin-checklist";
 import { OwnerCancelBooking, OwnerRespondButtons } from "@/components/owner-booking-actions";
+import { Card } from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-md rounded-2xl border border-border p-lg">
+    <Card className="flex flex-col gap-md">
       <h2 className="font-display text-lg font-semibold">{title}</h2>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -55,12 +57,16 @@ export default async function OwnerBookingDetailPage(props: PageProps<"/owner/bo
   const visibleIds = guestIds.filter((g) => !g.purgedAt && new Date(g.purgeAfter).getTime() > now);
 
   return (
-    <div className="flex flex-col gap-lg">
-      <Link href="/owner/bookings" className="text-sm text-ink-secondary hover:text-ink">
-        ← {t.back}
+    <div className="flex max-w-3xl flex-col gap-lg">
+      <Link
+        href="/owner/bookings"
+        className="flex w-fit items-center gap-xs text-sm font-medium text-ink-secondary hover:text-ink"
+      >
+        <Icon name="arrow" className="size-4 -scale-x-100 rtl:scale-x-100" />
+        {t.back}
       </Link>
 
-      <div className="flex flex-col gap-sm rounded-2xl border border-border p-lg">
+      <Card className="flex flex-col gap-sm">
         <div className="flex flex-wrap items-center justify-between gap-sm">
           <BookingStatusBadge status={booking.status} />
           {booking.status === "pending" && booking.expiresAt && (
@@ -83,7 +89,7 @@ export default async function OwnerBookingDetailPage(props: PageProps<"/owner/bo
           </p>
         )}
         {booking.status === "pending" && <OwnerRespondButtons bookingId={booking.id} />}
-      </div>
+      </Card>
 
       {confirmed && (
         <>

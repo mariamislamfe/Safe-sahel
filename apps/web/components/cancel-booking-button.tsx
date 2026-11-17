@@ -8,6 +8,8 @@ import { useLocale } from "@/lib/i18n/locale-provider";
 import { guestDict } from "@/lib/i18n/guest";
 import { errorText } from "@/lib/i18n/common";
 import { money } from "@/lib/i18n/format";
+import { useFeedback } from "@/components/feedback";
+import { dashboardDict } from "@/lib/i18n/dashboard";
 
 function daysUntil(dateIso: string): number {
   const today = new Date();
@@ -31,6 +33,8 @@ export function CancelBookingButton({
   const router = useRouter();
   const locale = useLocale();
   const t = guestDict[locale].cancel;
+  const f = dashboardDict[locale].toasts;
+  const fb = useFeedback();
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,7 +47,14 @@ export function CancelBookingButton({
         : isLate
           ? t.confirmLate(money(locale, depositAmount))
           : t.confirmEarly;
-    if (!confirm(message)) return;
+    const ok = await fb.confirm({
+      title: f.cancelTitle,
+      body: message,
+      tone: isLate ? "danger" : "default",
+      confirmLabel: f.cancelCta,
+      cancelLabel: f.keep,
+    });
+    if (!ok) return;
 
     setCancelling(true);
     setError(null);
@@ -55,6 +66,7 @@ export function CancelBookingButton({
       setCancelling(false);
       return;
     }
+    fb.toast(status === "pending" ? f.requestWithdrawn : f.bookingCancelled);
     router.refresh();
   }
 

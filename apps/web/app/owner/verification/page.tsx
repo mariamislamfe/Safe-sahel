@@ -6,6 +6,8 @@ import { ownerDict } from "@/lib/i18n/owner";
 import { common } from "@/lib/i18n/common";
 import { getLatestVerification, getOwnerProfile } from "@/lib/queries/owner-dashboard";
 import { VerificationForm } from "@/components/verification-form";
+import { Card, PageHeader } from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
 export default async function OwnerVerificationPage() {
   const supabase = await createClient();
@@ -33,54 +35,62 @@ export default async function OwnerVerificationPage() {
   const showForm = !profile.verified && !pending;
 
   return (
-    <div className="flex max-w-2xl flex-col gap-lg">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">{t.intro}</p>
+    <div className="flex max-w-3xl flex-col gap-xl">
+      <PageHeader title={t.title} description={t.intro} />
+
+      <div className="grid grid-cols-1 gap-md md:grid-cols-2">
+        <Card
+          tone={profile.verified ? "default" : pending ? "warn" : "default"}
+          className="flex flex-col gap-sm"
+        >
+          <h2 className="flex items-center gap-sm font-display font-semibold">
+            <Icon name="shield" className="size-5 text-turquoise-dark" />
+            {t.statusTitle}
+          </h2>
+          {profile.revokedAt && !profile.verified ? (
+            <p className="text-sm text-red-700">{t.revoked(profile.revokedReason ?? "—")}</p>
+          ) : profile.verified ? (
+            <p className="text-sm text-turquoise-dark">✓ {t.approved(profile.legalName ?? "—")}</p>
+          ) : !latest ? (
+            <p className="text-sm text-ink-secondary">{t.none}</p>
+          ) : pending ? (
+            <p className="text-sm text-ink">⏳ {t.pending(c.daysAgo(ago ?? 0))}</p>
+          ) : latest.status === "rejected" ? (
+            <p className="text-sm text-red-700">{t.rejected(latest.rejection_reason ?? "—")}</p>
+          ) : null}
+        </Card>
+
+        <Card className="flex flex-col gap-sm">
+          <h2 className="flex items-center gap-sm font-display font-semibold">
+            <Icon name="star" className="size-5 text-turquoise-dark" />
+            {t.badgesTitle}
+          </h2>
+          {badges.length === 0 ? (
+            <p className="text-sm text-ink-secondary">{t.noBadges}</p>
+          ) : (
+            <div className="flex flex-wrap gap-sm">
+              {badges.map((b) => (
+                <span
+                  key={b}
+                  className="rounded-full bg-butter px-md py-xs text-sm font-semibold text-ink"
+                >
+                  ✓ {b}
+                </span>
+              ))}
+            </div>
+          )}
+        </Card>
       </div>
 
-      <section className="flex flex-col gap-sm rounded-2xl border border-border p-lg">
-        <h2 className="font-display font-semibold">{t.statusTitle}</h2>
-        {profile.revokedAt && !profile.verified ? (
-          <p className="text-sm text-red-700">{t.revoked(profile.revokedReason ?? "—")}</p>
-        ) : profile.verified ? (
-          <p className="text-sm text-turquoise-dark">✓ {t.approved(profile.legalName ?? "—")}</p>
-        ) : !latest ? (
-          <p className="text-sm text-ink-secondary">{t.none}</p>
-        ) : pending ? (
-          <p className="text-sm text-ink">⏳ {t.pending(c.daysAgo(ago ?? 0))}</p>
-        ) : latest.status === "rejected" ? (
-          <p className="text-sm text-red-700">{t.rejected(latest.rejection_reason ?? "—")}</p>
-        ) : null}
-      </section>
-
-      <section className="flex flex-col gap-sm rounded-2xl border border-border p-lg">
-        <h2 className="font-display font-semibold">{t.badgesTitle}</h2>
-        {badges.length === 0 ? (
-          <p className="text-sm text-ink-secondary">{t.noBadges}</p>
-        ) : (
-          <div className="flex flex-wrap gap-sm">
-            {badges.map((b) => (
-              <span
-                key={b}
-                className="rounded-full bg-butter px-md py-xs text-sm font-semibold text-ink"
-              >
-                ✓ {b}
-              </span>
-            ))}
-          </div>
-        )}
-      </section>
-
       {showForm && (
-        <section className="flex flex-col gap-md rounded-2xl border border-border p-lg">
+        <Card className="flex flex-col gap-md">
           <h2 className="font-display font-semibold">{latest ? t.resubmit : t.formTitle}</h2>
           <VerificationForm
             profileId={user.id}
             defaultFullName={profile.legalName ?? profile.fullName ?? ""}
             defaultPhone={profile.phone ?? ""}
           />
-        </section>
+        </Card>
       )}
     </div>
   );

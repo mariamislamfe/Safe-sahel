@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getOwnerPropertyById, getPropertyImages } from "@/lib/queries/owner";
+import { PageHeader } from "@/components/admin/ui";
 import { PropertyPhotoUploader } from "@/components/property-photo-uploader";
 
 export default async function PropertyPhotosPage(
@@ -20,7 +21,7 @@ export default async function PropertyPhotosPage(
 
   return (
     <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">📷 {property.title}</h1>
+      <PageHeader title={property.title} />
       <PropertyPhotoUploader propertyId={property.id} ownerId={user.id} initialImages={images} />
     </div>
   );

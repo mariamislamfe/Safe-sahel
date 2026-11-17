@@ -18,13 +18,15 @@ import { WhatsAppButton } from "@/components/whatsapp-button";
 import { GuestIdUploader } from "@/components/guest-id-uploader";
 import { CheckinChecklist } from "@/components/checkin-checklist";
 import { CancelBookingButton } from "@/components/cancel-booking-button";
+import { Card } from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-md rounded-2xl border border-border p-lg">
+    <Card className="flex flex-col gap-md">
       <h2 className="font-display text-lg font-semibold">{title}</h2>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -56,9 +58,9 @@ export default async function GuestBookingDetailPage(props: PageProps<"/account/
 
   const header =
     booking.status === "pending"
-      ? { title: t.pendingTitle, body: t.pendingBody, tone: "bg-butter-soft" }
+      ? { title: t.pendingTitle, body: t.pendingBody, tone: "border-amber-200 bg-amber-50" }
       : confirmed
-        ? { title: t.confirmedTitle, body: null, tone: "bg-turquoise-light" }
+        ? { title: t.confirmedTitle, body: null, tone: "border-turquoise/30 bg-turquoise-light" }
         : booking.status === "declined"
           ? {
               title: t.declinedTitle,
@@ -66,23 +68,27 @@ export default async function GuestBookingDetailPage(props: PageProps<"/account/
                 booking.declineReason === "dates_taken"
                   ? t.declinedDatesTaken
                   : booking.declineReason,
-              tone: "bg-red-50",
+              tone: "border-red-200 bg-red-50",
             }
           : booking.status === "expired"
-            ? { title: t.expiredTitle, body: t.expiredBody, tone: "bg-surface-soft" }
+            ? { title: t.expiredTitle, body: t.expiredBody, tone: "border-border bg-surface" }
             : {
                 title: t.cancelledTitle,
                 body: booking.cancelledBy === "owner" ? t.cancelledByOwner : null,
-                tone: "bg-surface-soft",
+                tone: "border-border bg-surface",
               };
 
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-lg px-lg py-2xl">
-      <Link href="/account/bookings" className="text-sm text-ink-secondary hover:text-ink">
-        ← {c.back}
+    <div className="flex max-w-3xl flex-col gap-lg">
+      <Link
+        href="/account/bookings"
+        className="flex w-fit items-center gap-xs text-sm font-medium text-ink-secondary hover:text-ink"
+      >
+        <Icon name="arrow" className="size-4 -scale-x-100 rtl:scale-x-100" />
+        {c.back}
       </Link>
 
-      <div className={`flex flex-col gap-sm rounded-2xl p-lg ${header.tone}`}>
+      <div className={`flex flex-col gap-sm rounded-2xl border p-lg ${header.tone}`}>
         <div className="flex flex-wrap items-center justify-between gap-sm">
           <BookingStatusBadge status={booking.status} />
           {booking.status === "pending" && booking.expiresAt && (
@@ -93,7 +99,7 @@ export default async function GuestBookingDetailPage(props: PageProps<"/account/
         {header.body && <p className="text-sm text-ink-secondary">{header.body}</p>}
       </div>
 
-      <dl className="grid grid-cols-2 gap-md rounded-2xl border border-border p-lg text-sm sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-md rounded-2xl border border-border bg-surface p-lg text-sm shadow-[0_1px_2px_rgba(16,24,40,0.04)] sm:grid-cols-4">
         <div className="col-span-2">
           <dt className="text-ink-secondary">{t.property}</dt>
           <dd className="font-medium">
@@ -188,6 +194,6 @@ export default async function GuestBookingDetailPage(props: PageProps<"/account/
           />
         </div>
       )}
-    </main>
+    </div>
   );
 }

@@ -105,7 +105,7 @@ export function BookingForm({
   }
 
   const inputClass =
-    "w-full rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise";
+    "w-full rounded-xl border border-border bg-surface px-md py-2.5 text-sm outline-none transition focus:border-turquoise focus:ring-2 focus:ring-turquoise/20";
 
   return (
     <div className="flex flex-col gap-md">

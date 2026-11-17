@@ -8,12 +8,18 @@ import { useCurrentProfile } from "@/lib/hooks/use-current-profile";
 import { createClient } from "@/lib/supabase/client";
 import { LocaleToggle } from "@/app/locale-toggle";
 import { getDictionary } from "@/lib/i18n/dictionary";
+import { NotificationBell } from "@/components/notification-bell";
 
 function MenuIcon({ open }: { open: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden>
       {open ? (
-        <path d="M5 5l12 12M17 5L5 17" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path
+          d="M5 5l12 12M17 5L5 17"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
       ) : (
         <>
           <path d="M3 6h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
@@ -143,7 +149,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
                     {t.hosting}
                   </Link>
                 )}
-                {profile.role === "admin" && (
+                {profile.canAccessAdmin && (
                   <Link
                     href="/admin"
                     className={`transition-colors ${onHero ? "hover:text-white" : "hover:text-ink"}`}
@@ -172,6 +178,8 @@ export function SiteHeader({ locale }: { locale: Locale }) {
             <LocaleToggle locale={locale} transparent={onHero} />
           </div>
 
+          {profile && <NotificationBell tone={onHero ? "light" : "default"} />}
+
           {loading ? null : profile ? (
             <Link href="/profile" className="hidden items-center md:flex" title={t.profile}>
               <span className="flex size-8 items-center justify-center rounded-full bg-turquoise-light font-display text-xs font-bold text-turquoise-dark">
@@ -191,7 +199,9 @@ export function SiteHeader({ locale }: { locale: Locale }) {
               <Link
                 href="/signup"
                 className={`rounded-full px-md py-sm text-sm font-medium ${
-                  onHero ? "bg-white text-ink hover:bg-white/90" : "bg-ink text-white hover:bg-ink/90"
+                  onHero
+                    ? "bg-white text-ink hover:bg-white/90"
+                    : "bg-ink text-white hover:bg-ink/90"
                 }`}
               >
                 {t.signUp}
@@ -260,7 +270,7 @@ export function SiteHeader({ locale }: { locale: Locale }) {
                   {t.hosting}
                 </Link>
               )}
-              {profile.role === "admin" && (
+              {profile.canAccessAdmin && (
                 <Link
                   href="/admin"
                   onClick={() => setMenuOpen(false)}
@@ -269,7 +279,10 @@ export function SiteHeader({ locale }: { locale: Locale }) {
                   {t.admin}
                 </Link>
               )}
-              <button onClick={signOut} className="rounded-lg px-md py-sm text-start hover:bg-surface-soft">
+              <button
+                onClick={signOut}
+                className="rounded-lg px-md py-sm text-start hover:bg-surface-soft"
+              >
                 {t.signOut}
               </button>
             </nav>

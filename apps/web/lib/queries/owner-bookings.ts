@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCoverImages } from "@/lib/queries/images";
 import type { BookingStatusEnum } from "@safe-sahel/types";
 
 export type OwnerBookingItem = {
@@ -7,6 +8,7 @@ export type OwnerBookingItem = {
   propertyId: string;
   guestId: string;
   propertyTitle: string;
+  coverImageUrl: string | null;
   guestName: string | null;
   checkIn: string;
   checkOut: string;
@@ -48,7 +50,7 @@ export async function getOwnerBookings(ownerId: string): Promise<OwnerBookingIte
   if (!bookings || bookings.length === 0) return [];
 
   const ids = bookings.map((b) => b.id);
-  const [{ data: guests }, { data: guestIds }, { data: checklists }] = await Promise.all([
+  const [{ data: guests }, { data: guestIds }, { data: checklists }, covers] = await Promise.all([
     supabase
       .from("profiles")
       .select("id, full_name")
@@ -58,6 +60,7 @@ export async function getOwnerBookings(ownerId: string): Promise<OwnerBookingIte
       .from("checkin_checklists")
       .select("booking_id, owner_confirmed_at, guest_confirmed_at")
       .in("booking_id", ids),
+    getCoverImages(bookings.map((b) => b.property_id)),
   ]);
   const nameById = new Map((guests ?? []).map((g) => [g.id, g.full_name]));
   const idCount = new Map<string, number>();
@@ -75,6 +78,7 @@ export async function getOwnerBookings(ownerId: string): Promise<OwnerBookingIte
     propertyId: b.property_id,
     guestId: b.guest_id,
     propertyTitle: titleById.get(b.property_id) ?? "—",
+    coverImageUrl: covers.get(b.property_id) ?? null,
     guestName: nameById.get(b.guest_id) ?? null,
     checkIn: b.check_in,
     checkOut: b.check_out,

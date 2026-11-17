@@ -5,9 +5,16 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import type { CurrentProfile } from "@/lib/hooks/use-current-profile";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { dashboardDict } from "@/lib/i18n/dashboard";
+import { useFeedback } from "@/components/feedback";
 
 export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
   const router = useRouter();
+  const locale = useLocale();
+  const t = dashboardDict[locale].profile;
+  const f = dashboardDict[locale].toasts;
+  const fb = useFeedback();
   const [fullName, setFullName] = useState(profile.fullName ?? "");
   const [username, setUsername] = useState(profile.username ?? "");
   const [phone, setPhone] = useState(profile.phone ?? "");
@@ -55,23 +62,22 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
 
     setSavingProfile(false);
     if (updateError) {
-      setError(
-        updateError.message.includes("duplicate")
-          ? "That username is already taken."
-          : updateError.message,
-      );
+      setError(updateError.message.includes("duplicate") ? t.usernameTaken : updateError.message);
       return;
     }
     setSaved(true);
+    fb.toast(f.saved);
     router.refresh();
   }
 
   async function becomeGuestOnly() {
-    if (!confirm("Switch back to guest-only? You can enable hosting again anytime.")) return;
+    if (!(await fb.confirm({ title: t.turnOffHosting, body: t.turnOffConfirm, tone: "danger" })))
+      return;
     setDemoting(true);
     const supabase = createClient();
     await supabase.from("profiles").update({ role: "guest" }).eq("id", profile.id);
     setDemoting(false);
+    fb.toast(f.hostingOff);
     router.push("/");
     router.refresh();
   }
@@ -89,7 +95,7 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
           )}
         </div>
         <label className="cursor-pointer text-sm font-medium text-turquoise-dark hover:underline">
-          {uploadingAvatar ? "Uploading…" : "Change photo"}
+          {uploadingAvatar ? t.uploading : t.changePhoto}
           <input
             type="file"
             accept="image/*"
@@ -102,47 +108,45 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
 
       <div className="flex flex-col gap-md">
         <label className="flex flex-col gap-xs">
-          <span className="text-sm font-medium text-ink">Full name</span>
+          <span className="text-sm font-medium text-ink">{t.fullName}</span>
           <input
             value={fullName}
             onChange={(e) => setFullName(e.target.value)}
-            className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+            className="rounded-xl border border-border bg-surface px-md py-2.5 text-sm outline-none transition focus:border-turquoise focus:ring-2 focus:ring-turquoise/20"
           />
         </label>
         <label className="flex flex-col gap-xs">
-          <span className="text-sm font-medium text-ink">Username</span>
+          <span className="text-sm font-medium text-ink">{t.username}</span>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
-            placeholder="e.g. sara_sahel"
-            className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+            placeholder="sara_sahel"
+            className="rounded-xl border border-border bg-surface px-md py-2.5 text-sm outline-none transition focus:border-turquoise focus:ring-2 focus:ring-turquoise/20"
           />
-          <span className="text-xs text-ink-secondary">Lets other people find your profile.</span>
+          <span className="text-xs text-ink-secondary">{t.usernameHint}</span>
         </label>
         <label className="flex flex-col gap-xs">
-          <span className="text-sm font-medium text-ink">Phone number</span>
+          <span className="text-sm font-medium text-ink">{t.phone}</span>
           <input
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="e.g. 01123094983"
-            className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+            placeholder="01xxxxxxxxx"
+            dir="ltr"
+            className="rounded-xl border border-border bg-surface px-md py-2.5 text-sm outline-none transition focus:border-turquoise focus:ring-2 focus:ring-turquoise/20"
           />
-          <span className="text-xs text-ink-secondary">
-            Shown to the other side once a booking on your account is confirmed, so you can
-            coordinate directly.
-          </span>
+          <span className="text-xs text-ink-secondary">{t.phoneHint}</span>
         </label>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
-        {saved && <p className="text-sm text-turquoise-dark">Saved.</p>}
+        {saved && <p className="text-sm font-medium text-turquoise-dark">{t.saved}</p>}
 
         <button
           onClick={saveProfile}
           disabled={savingProfile}
-          className="w-fit rounded-md bg-turquoise px-lg py-sm text-sm font-semibold text-white hover:bg-turquoise-dark disabled:opacity-60"
+          className="w-fit rounded-xl bg-turquoise px-lg py-2.5 text-sm font-semibold text-white hover:bg-turquoise-dark disabled:opacity-60"
         >
-          {savingProfile ? "Saving…" : "Save changes"}
+          {savingProfile ? t.saving : t.save}
         </button>
       </div>
 
@@ -153,7 +157,7 @@ export function ProfileEditor({ profile }: { profile: CurrentProfile }) {
             disabled={demoting}
             className="text-sm font-medium text-ink-secondary hover:text-red-600"
           >
-            {demoting ? "Switching…" : "Turn off hosting — switch back to guest only"}
+            {demoting ? t.switching : t.turnOffHosting}
           </button>
         </div>
       )}

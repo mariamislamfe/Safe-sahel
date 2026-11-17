@@ -1,16 +1,37 @@
 import { nowMs } from "@/lib/time";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { adminDict } from "@/lib/i18n/admin";
 import { ownerDict } from "@/lib/i18n/owner";
+import { common } from "@/lib/i18n/common";
 import { date, money } from "@/lib/i18n/format";
+import { requireSection } from "@/lib/admin-access";
 import { compoundList, profileMap, propertyMap } from "@/lib/queries/admin";
 import { getPlatformSetting } from "@/lib/queries/owner-dashboard";
+import {
+  ChipRow,
+  EmptyState,
+  FilterTabs,
+  PageHeader,
+  Pill,
+  Table,
+  Td,
+  Th,
+  Tr,
+  type PillTone,
+} from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
 const FILTERS = ["all", "active", "expiring", "grace", "expired"] as const;
+const TONE: Record<string, PillTone> = {
+  active: "success",
+  expiring: "warn",
+  grace: "warn",
+  expired: "danger",
+};
 
 export default async function AdminSubscriptionsPage(props: PageProps<"/admin/subscriptions">) {
+  await requireSection("subscriptions");
   const params = await props.searchParams;
   const filter = (FILTERS as readonly string[]).includes(String(params.f))
     ? String(params.f)
@@ -41,7 +62,7 @@ export default async function AdminSubscriptionsPage(props: PageProps<"/admin/su
     const prev = latest.get(s.property_id);
     if (!prev || prev.ends_at < s.ends_at) latest.set(s.property_id, s);
   }
-  const rows = [...latest.values()]
+  const all = [...latest.values()]
     .map((s) => {
       const end = new Date(s.ends_at).getTime();
       const state =
@@ -54,98 +75,74 @@ export default async function AdminSubscriptionsPage(props: PageProps<"/admin/su
               : "expired";
       return { s, state, property: props_.get(s.property_id) };
     })
-    .filter((r) =>
-      filter === "all"
-        ? true
-        : filter === "active"
-          ? r.state === "active" || r.state === "expiring"
-          : r.state === filter,
-    )
     .filter((r) => !compoundId || r.property?.compoundId === compoundId);
-
-  const style: Record<string, string> = {
-    active: "bg-turquoise-light text-turquoise-dark",
-    expiring: "bg-butter-soft text-ink",
-    grace: "bg-orange-50 text-orange-700",
-    expired: "bg-red-50 text-red-700",
-  };
+  const match = (f: string, state: string) =>
+    f === "all" ? true : f === "active" ? state === "active" || state === "expiring" : state === f;
+  const rows = all.filter((r) => match(filter, r.state));
   const link = (f: string, c: string) => `/admin/subscriptions?f=${f}${c ? `&c=${c}` : ""}`;
 
   return (
-    <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">{t.title}</h1>
+    <>
+      <PageHeader title={t.title} count={all.length} />
       {now < new Date(freeUntil).getTime() && (
-        <p className="rounded-lg bg-turquoise-light px-md py-sm text-sm text-turquoise-dark">
+        <div className="flex items-start gap-sm rounded-xl bg-turquoise-light px-md py-sm text-sm text-turquoise-dark">
+          <Icon name="gift" className="mt-0.5 size-4 shrink-0" />
           {t.freeNote(date(locale, freeUntil))}
-        </p>
+        </div>
       )}
-      <div className="flex flex-wrap gap-xs">
-        {FILTERS.map((f) => (
-          <Link
-            key={f}
-            href={link(f, compoundId)}
-            className={`rounded-full border px-md py-xs text-sm ${filter === f ? "border-ink bg-ink text-white" : "border-border"}`}
-          >
-            {t.filters[f]}
-          </Link>
-        ))}
-      </div>
-      <div className="-mx-lg flex gap-xs overflow-x-auto px-lg">
-        <Link
-          href={link(filter, "")}
-          className={`shrink-0 rounded-full border px-md py-xs text-xs ${!compoundId ? "border-turquoise bg-turquoise-light" : "border-border"}`}
-        >
-          {t.allCompounds}
-        </Link>
-        {compounds.map((c) => (
-          <Link
-            key={c.id}
-            href={link(filter, c.id)}
-            className={`shrink-0 rounded-full border px-md py-xs text-xs ${compoundId === c.id ? "border-turquoise bg-turquoise-light" : "border-border"}`}
-          >
-            {c.is_focus && "★ "}
-            {locale === "ar" && c.name_ar ? c.name_ar : c.name}
-          </Link>
-        ))}
+      <div className="flex flex-col gap-sm">
+        <FilterTabs
+          items={FILTERS.map((f) => ({
+            href: link(f, compoundId),
+            label: t.filters[f]!,
+            active: filter === f,
+            count: all.filter((r) => match(f, r.state)).length,
+          }))}
+        />
+        <ChipRow
+          items={[
+            { href: link(filter, ""), label: t.allCompounds, active: !compoundId },
+            ...compounds.map((c) => ({
+              href: link(filter, c.id),
+              label: `${c.is_focus ? "★ " : ""}${locale === "ar" && c.name_ar ? c.name_ar : c.name}`,
+              active: compoundId === c.id,
+            })),
+          ]}
+        />
       </div>
 
       {rows.length === 0 ? (
-        <p className="text-sm text-ink-secondary">{t.empty}</p>
+        <EmptyState icon="repeat" title={t.empty} body={common[locale].noResults} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-surface-soft text-ink-secondary">
-              <tr>
-                <th className="p-md text-start font-medium">{t.listing}</th>
-                <th className="p-md text-start font-medium">{t.owner}</th>
-                <th className="p-md text-start font-medium">{t.plan}</th>
-                <th className="p-md text-start font-medium">{t.ends}</th>
-                <th className="p-md text-start font-medium">{t.status}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ s, state, property }) => (
-                <tr key={s.id} className="border-t border-border">
-                  <td className="p-md font-medium">{property?.title ?? "—"}</td>
-                  <td className="p-md">{owners.get(s.owner_id)?.name ?? "—"}</td>
-                  <td className="p-md">
-                    {plans[s.plan]?.name ?? s.plan} · {money(locale, s.amount_egp)}
-                    {s.is_founder_rate && " ⭐"}
-                  </td>
-                  <td className="p-md">{date(locale, s.ends_at)}</td>
-                  <td className="p-md">
-                    <span
-                      className={`rounded-full px-sm py-0.5 text-xs font-medium ${style[state]}`}
-                    >
-                      {t.filters[state]}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table minWidth={680}>
+          <thead>
+            <tr>
+              <Th>{t.listing}</Th>
+              <Th>{t.owner}</Th>
+              <Th>{t.plan}</Th>
+              <Th>{t.ends}</Th>
+              <Th>{t.status}</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ s, state, property }) => (
+              <Tr key={s.id}>
+                <Td className="font-medium">{property?.title ?? "—"}</Td>
+                <Td>{owners.get(s.owner_id)?.name ?? "—"}</Td>
+                <Td>
+                  {plans[s.plan]?.name ?? s.plan}
+                  <span className="text-ink-secondary"> · {money(locale, s.amount_egp)}</span>
+                  {s.is_founder_rate && " ⭐"}
+                </Td>
+                <Td className="whitespace-nowrap">{date(locale, s.ends_at)}</Td>
+                <Td>
+                  <Pill tone={TONE[state]}>{t.filters[state]}</Pill>
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
       )}
-    </div>
+    </>
   );
 }

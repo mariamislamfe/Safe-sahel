@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -20,6 +20,17 @@ import { blockerTexts, common, errorText } from "@/lib/i18n/common";
 import { getDictionary } from "@/lib/i18n/dictionary";
 import { guestDict } from "@/lib/i18n/guest";
 import { money } from "@/lib/i18n/format";
+import { dashboardDict } from "@/lib/i18n/dashboard";
+import { useFeedback } from "@/components/feedback";
+import { Icon } from "@/components/admin/icons";
+
+/** Fields validated before leaving each step (the rest are optional). */
+const STEP_FIELDS: (keyof PropertyFormInput)[][] = [
+  ["title", "type", "compoundId", "unitAddress", "description"],
+  ["bedrooms", "bathrooms", "maxGuests", "floor", "sizeSqm", "beds"],
+  ["pricePerNight", "minStayNights", "dayUsePrice", "monthlyPrice", "cancellationPolicy"],
+  ["amenityIds", "status"],
+];
 
 type Props = {
   ownerId: string;
@@ -52,6 +63,12 @@ export function PropertyForm({
   const c = common[locale];
   const policies = getDictionary(locale).propertyDetail.cancellationPolicies;
   const viewLabels = guestDict[locale].listing.viewTypes;
+  const f = dashboardDict[locale].form;
+  const fb = useFeedback();
+  const [step, setStep] = useState(0);
+  const [restored, setRestored] = useState(false);
+  const draftKey = `ss:listing-draft:${ownerId}`;
+  const topRef = useRef<HTMLDivElement>(null);
 
   const [serverError, setServerError] = useState<string | null>(null);
   const [publishBlockers, setPublishBlockers] = useState<string[]>([]);
@@ -68,6 +85,9 @@ export function PropertyForm({
     handleSubmit,
     watch,
     setValue,
+    trigger,
+    reset,
+    getValues,
     formState: { errors, isSubmitting },
   } = useForm<PropertyFormInput>({
     resolver: zodResolver(propertyFormSchema),
@@ -128,6 +148,53 @@ export function PropertyForm({
           monthlyRentalEnabled: false,
         },
   });
+
+  // New listings: restore an unsaved draft once, then autosave on every change.
+  useEffect(() => {
+    if (existing) return;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(draftKey);
+    } catch {}
+    if (raw) {
+      try {
+        const draft = JSON.parse(raw) as Partial<PropertyFormInput>;
+        reset({ ...getValues(), ...draft });
+        setTimeout(() => setRestored(true), 0);
+      } catch {}
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const subscription = watch((values) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        try {
+          localStorage.setItem(draftKey, JSON.stringify(values));
+        } catch {}
+      }, 600);
+    });
+    return () => {
+      clearTimeout(timer);
+      subscription.unsubscribe();
+    };
+  }, [existing, draftKey, reset, getValues, watch]);
+
+  function discardDraft() {
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {}
+    window.location.reload();
+  }
+
+  function goTo(next: number) {
+    setStep(next);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function nextStep() {
+    const ok = await trigger(STEP_FIELDS[step]);
+    if (!ok) return fb.toast(f.fixErrors, "error");
+    goTo(Math.min(step + 1, STEP_FIELDS.length - 1));
+  }
 
   const dayUseEnabled = watch("dayUseEnabled");
   const monthlyRentalEnabled = watch("monthlyRentalEnabled");
@@ -312,13 +379,22 @@ export function PropertyForm({
         const blockers = parsePublishBlockers(error.message);
         if (blockers.length) {
           setPublishBlockers(blockers);
-          if (!existing) router.replace(`/owner/properties/${propertyId}/edit`);
+          if (!existing) {
+            try {
+              localStorage.removeItem(draftKey);
+            } catch {}
+            router.replace(`/owner/properties/${propertyId}/edit`);
+          }
           return;
         }
         return setServerError(errorText(locale, rpcErrorCode(error.message)));
       }
     }
 
+    try {
+      localStorage.removeItem(draftKey);
+    } catch {}
+    fb.toast(dashboardDict[locale].toasts.saved);
     router.push(
       existing ? `/owner/properties/${propertyId}/edit` : `/owner/properties/${propertyId}/photos`,
     );
@@ -330,287 +406,350 @@ export function PropertyForm({
     return acc;
   }, {});
   const typeLabel = c.propertyTypes[watchedType] ?? watchedType;
+  const stepLabels = [t.basics, t.capacity, t.pricing, t.amenities];
+  const lastStep = stepLabels.length - 1;
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-xl">
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.basics}</h2>
-        <Field label={t.title} error={errors.title && t.errTitle}>
-          <input {...register("title")} className={inputClass} placeholder={t.titlePlaceholder} />
-        </Field>
-
-        <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-          <Field label={t.type}>
-            <select {...register("type")} className={inputClass}>
-              {propertyTypeOptions.map((o) => (
-                <option key={o} value={o}>
-                  {c.propertyTypes[o] ?? o}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label={t.compound}>
-            <select
-              {...register("compoundId")}
-              className={inputClass}
-              onChange={(e) => {
-                if (e.target.value === "__new__") {
-                  setAddingCompound(true);
-                  return;
-                }
-                setValue("compoundId", e.target.value || null);
-              }}
+    <form
+      onSubmit={(e) => {
+        // Enter on an early step moves forward instead of submitting half a listing.
+        if (!existing && step < lastStep) {
+          e.preventDefault();
+          void nextStep();
+          return;
+        }
+        void handleSubmit(onSubmit, () => fb.toast(f.fixErrors, "error"))(e);
+      }}
+      className="flex flex-col gap-xl"
+    >
+      <div ref={topRef} className="flex scroll-mt-24 flex-col gap-md">
+        {restored && (
+          <div className="flex flex-wrap items-center justify-between gap-sm rounded-xl border border-turquoise/30 bg-turquoise-light/60 px-md py-sm text-sm">
+            <span>{f.draftRestored}</span>
+            <button
+              type="button"
+              onClick={discardDraft}
+              className="font-semibold text-turquoise-dark hover:underline"
             >
-              <option value="">{t.none}</option>
-              {compoundOptions.map((co) => (
-                <option key={co.id} value={co.id}>
-                  {co.name}
-                </option>
-              ))}
-              <option value="__new__">{t.addCompound}</option>
-            </select>
-          </Field>
-        </div>
-
-        {addingCompound && (
-          <div className="flex flex-col gap-sm rounded-md border border-dashed border-turquoise bg-turquoise-light p-md">
-            <p className="text-sm font-medium text-ink">{t.newCompound}</p>
-            <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
-              <input
-                value={newCompoundName}
-                onChange={(e) => setNewCompoundName(e.target.value)}
-                placeholder={t.compoundName}
-                className={inputClass}
-              />
-              <input
-                value={newCompoundArea}
-                onChange={(e) => setNewCompoundArea(e.target.value)}
-                placeholder={t.area}
-                className={inputClass}
-              />
-            </div>
-            <label className="flex flex-col gap-xs">
-              <span className="text-xs font-medium text-ink-secondary">{t.compoundPhoto}</span>
-              <input
-                type="file"
-                accept="image/*"
-                onChange={(e) => setNewCompoundPhoto(e.target.files?.[0] ?? null)}
-                className="text-sm text-ink-secondary"
-              />
-            </label>
-            {compoundError && <p className="text-xs text-red-600">{compoundError}</p>}
-            <div className="flex gap-sm">
-              <button
-                type="button"
-                onClick={createCompound}
-                disabled={addingCompoundBusy}
-                className="rounded-md bg-turquoise px-md py-xs text-sm font-medium text-white hover:bg-turquoise-dark disabled:opacity-60"
-              >
-                {addingCompoundBusy ? t.adding : t.addCompoundBtn}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAddingCompound(false)}
-                className="text-sm text-ink-secondary hover:text-ink"
-              >
-                {t.cancel}
-              </button>
-            </div>
+              {f.discard}
+            </button>
           </div>
         )}
+        <ol className="grid grid-cols-4 gap-xs">
+          {stepLabels.map((label, i) => {
+            const reachable = !!existing || i <= step;
+            return (
+              <li key={label}>
+                <button
+                  type="button"
+                  disabled={!reachable}
+                  onClick={() => goTo(i)}
+                  className="flex w-full flex-col gap-1.5 text-start disabled:cursor-default"
+                >
+                  <span
+                    className={`h-1.5 rounded-full transition ${i <= step ? "bg-turquoise" : "bg-border"}`}
+                  />
+                  <span
+                    className={`hidden text-xs font-medium sm:block ${i === step ? "text-ink" : "text-ink-secondary"}`}
+                  >
+                    {label}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ol>
+        <p className="text-xs font-medium text-ink-secondary sm:hidden">
+          {f.step(step + 1, stepLabels.length)} · {stepLabels[step]}
+        </p>
+      </div>
 
-        <Field label={t.unitAddress} hint={t.unitAddressHint}>
-          <input {...register("unitAddress")} className={inputClass} placeholder="B12 – 3" />
-        </Field>
+      <div className={step === 0 ? "flex flex-col gap-xl" : "hidden"}>
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.basics}</h2>
+          <Field label={t.title} error={errors.title && t.errTitle}>
+            <input {...register("title")} className={inputClass} placeholder={t.titlePlaceholder} />
+          </Field>
 
-        <Field label={t.description}>
-          <textarea {...register("description")} rows={4} className={inputClass} />
-        </Field>
-      </section>
+          <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
+            <Field label={t.type}>
+              <select {...register("type")} className={inputClass}>
+                {propertyTypeOptions.map((o) => (
+                  <option key={o} value={o}>
+                    {c.propertyTypes[o] ?? o}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t.compound}>
+              <select
+                {...register("compoundId")}
+                className={inputClass}
+                onChange={(e) => {
+                  if (e.target.value === "__new__") {
+                    setAddingCompound(true);
+                    return;
+                  }
+                  setValue("compoundId", e.target.value || null);
+                }}
+              >
+                <option value="">{t.none}</option>
+                {compoundOptions.map((co) => (
+                  <option key={co.id} value={co.id}>
+                    {co.name}
+                  </option>
+                ))}
+                <option value="__new__">{t.addCompound}</option>
+              </select>
+            </Field>
+          </div>
 
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.capacity}</h2>
-        <div className="grid grid-cols-3 gap-md">
-          <Field label={t.bedrooms}>
-            <input type="number" min={0} {...register("bedrooms")} className={inputClass} />
-          </Field>
-          <Field label={t.bathrooms}>
-            <input type="number" min={0} {...register("bathrooms")} className={inputClass} />
-          </Field>
-          <Field label={t.maxGuests}>
-            <input type="number" min={1} {...register("maxGuests")} className={inputClass} />
-          </Field>
-        </div>
-        <div className="grid grid-cols-2 gap-md">
-          <Field label={t.floor}>
-            <input type="number" {...register("floor")} className={inputClass} />
-          </Field>
-          <Field label={t.view}>
-            <select
-              {...register("viewType")}
-              className={inputClass}
-              onChange={(e) => setValue("viewType", (e.target.value || null) as never)}
-            >
-              <option value="">{t.notSpecified}</option>
-              {viewTypeOptions.map((v) => (
-                <option key={v} value={v}>
-                  {viewLabels[v] ?? v}
-                </option>
-              ))}
-            </select>
-          </Field>
-        </div>
-        <div className="flex flex-wrap gap-lg">
-          <Checkbox label={t.parking} {...register("parking")} />
-          <Checkbox label={t.beachAccess} {...register("beachAccess")} />
-          <Checkbox label={t.poolAccess} {...register("poolAccess")} />
-        </div>
-      </section>
+          {addingCompound && (
+            <div className="flex flex-col gap-sm rounded-md border border-dashed border-turquoise bg-turquoise-light p-md">
+              <p className="text-sm font-medium text-ink">{t.newCompound}</p>
+              <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+                <input
+                  value={newCompoundName}
+                  onChange={(e) => setNewCompoundName(e.target.value)}
+                  placeholder={t.compoundName}
+                  className={inputClass}
+                />
+                <input
+                  value={newCompoundArea}
+                  onChange={(e) => setNewCompoundArea(e.target.value)}
+                  placeholder={t.area}
+                  className={inputClass}
+                />
+              </div>
+              <label className="flex flex-col gap-xs">
+                <span className="text-xs font-medium text-ink-secondary">{t.compoundPhoto}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => setNewCompoundPhoto(e.target.files?.[0] ?? null)}
+                  className="text-sm text-ink-secondary"
+                />
+              </label>
+              {compoundError && <p className="text-xs text-red-600">{compoundError}</p>}
+              <div className="flex gap-sm">
+                <button
+                  type="button"
+                  onClick={createCompound}
+                  disabled={addingCompoundBusy}
+                  className="rounded-md bg-turquoise px-md py-xs text-sm font-medium text-white hover:bg-turquoise-dark disabled:opacity-60"
+                >
+                  {addingCompoundBusy ? t.adding : t.addCompoundBtn}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddingCompound(false)}
+                  className="text-sm text-ink-secondary hover:text-ink"
+                >
+                  {t.cancel}
+                </button>
+              </div>
+            </div>
+          )}
 
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.moreDetails}</h2>
-        <div className="grid grid-cols-2 gap-md">
-          <Field label={t.size}>
-            <input type="number" min={1} {...register("sizeSqm")} className={inputClass} />
+          <Field label={t.unitAddress} hint={t.unitAddressHint}>
+            <input {...register("unitAddress")} className={inputClass} placeholder="B12 – 3" />
           </Field>
-          <Field label={t.beds}>
-            <input type="number" min={1} {...register("beds")} className={inputClass} />
+
+          <Field label={t.description}>
+            <textarea {...register("description")} rows={4} className={inputClass} />
           </Field>
-        </div>
-        <Field label={t.checkIn}>
-          <textarea
-            {...register("checkInInstructions")}
-            rows={2}
-            placeholder={t.checkInPlaceholder}
-            className={inputClass}
-          />
-        </Field>
-        <Field label={t.village}>
-          <textarea
-            {...register("villageEntryRequirements")}
-            rows={2}
-            placeholder={t.villagePlaceholder}
-            className={inputClass}
-          />
-        </Field>
-        {beachAccess && (
-          <Field label={t.beachDetails}>
+        </section>
+      </div>
+
+      <div className={step === 1 ? "flex flex-col gap-xl" : "hidden"}>
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.capacity}</h2>
+          <div className="grid grid-cols-3 gap-md">
+            <Field label={t.bedrooms}>
+              <input type="number" min={0} {...register("bedrooms")} className={inputClass} />
+            </Field>
+            <Field label={t.bathrooms}>
+              <input type="number" min={0} {...register("bathrooms")} className={inputClass} />
+            </Field>
+            <Field label={t.maxGuests}>
+              <input type="number" min={1} {...register("maxGuests")} className={inputClass} />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 gap-md">
+            <Field label={t.floor}>
+              <input type="number" {...register("floor")} className={inputClass} />
+            </Field>
+            <Field label={t.view}>
+              <select
+                {...register("viewType")}
+                className={inputClass}
+                onChange={(e) => setValue("viewType", (e.target.value || null) as never)}
+              >
+                <option value="">{t.notSpecified}</option>
+                {viewTypeOptions.map((v) => (
+                  <option key={v} value={v}>
+                    {viewLabels[v] ?? v}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-lg">
+            <Checkbox label={t.parking} {...register("parking")} />
+            <Checkbox label={t.beachAccess} {...register("beachAccess")} />
+            <Checkbox label={t.poolAccess} {...register("poolAccess")} />
+          </div>
+        </section>
+
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.moreDetails}</h2>
+          <div className="grid grid-cols-2 gap-md">
+            <Field label={t.size}>
+              <input type="number" min={1} {...register("sizeSqm")} className={inputClass} />
+            </Field>
+            <Field label={t.beds}>
+              <input type="number" min={1} {...register("beds")} className={inputClass} />
+            </Field>
+          </div>
+          <Field label={t.checkIn}>
             <textarea
-              {...register("beachAccessDetails")}
+              {...register("checkInInstructions")}
               rows={2}
-              placeholder={t.beachPlaceholder}
+              placeholder={t.checkInPlaceholder}
               className={inputClass}
             />
           </Field>
-        )}
-      </section>
-
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.houseRules}</h2>
-        <div className="flex flex-wrap gap-lg">
-          <Checkbox label={t.pets} {...register("petsAllowed")} />
-          <Checkbox label={t.parties} {...register("partiesAllowed")} />
-          <Checkbox label={t.smoking} {...register("smokingAllowed")} />
-          <Checkbox label={t.photography} {...register("commercialPhotographyAllowed")} />
-        </div>
-        <Field label={t.cancellation}>
-          <select {...register("cancellationPolicy")} className={inputClass}>
-            {cancellationPolicyOptions.map((p) => (
-              <option key={p} value={p}>
-                {policies[p].label} — {policies[p].description}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </section>
-
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.pricing}</h2>
-        <div className="grid grid-cols-2 gap-md">
-          <Field label={t.pricePerNight} error={errors.pricePerNight && t.errPrice}>
-            <input type="number" min={1} {...register("pricePerNight")} className={inputClass} />
+          <Field label={t.village}>
+            <textarea
+              {...register("villageEntryRequirements")}
+              rows={2}
+              placeholder={t.villagePlaceholder}
+              className={inputClass}
+            />
           </Field>
-          <Field label={t.minStay}>
-            <input type="number" min={1} {...register("minStayNights")} className={inputClass} />
-          </Field>
-        </div>
-
-        <div className="flex flex-col gap-xs rounded-md border border-turquoise/30 bg-turquoise-light/50 px-md py-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-turquoise-dark">
-            {t.recTitle}
-          </p>
-          {comparableStats ? (
-            <>
-              <p className="text-sm text-ink">
-                {t.recBody(
-                  typeLabel,
-                  watchedCompoundId ? t.recScopeCompound : t.recScopeAll,
-                  money(locale, comparableStats.averagePricePerNight),
-                  comparableStats.sampleSize,
-                )}
-              </p>
-              <p className="text-xs text-ink-secondary">
-                {t.recRange(
-                  money(locale, Math.round(comparableStats.averagePricePerNight * 0.85)),
-                  money(locale, Math.round(comparableStats.averagePricePerNight * 1.15)),
-                )}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-ink-secondary">{t.recNone}</p>
+          {beachAccess && (
+            <Field label={t.beachDetails}>
+              <textarea
+                {...register("beachAccessDetails")}
+                rows={2}
+                placeholder={t.beachPlaceholder}
+                className={inputClass}
+              />
+            </Field>
           )}
-        </div>
+        </section>
+      </div>
 
-        <Checkbox label={t.dayUse} {...register("dayUseEnabled")} />
-        {dayUseEnabled && (
-          <Field label={t.dayUsePrice} error={errors.dayUsePrice && t.errDayUse}>
-            <input type="number" min={1} {...register("dayUsePrice")} className={inputClass} />
-          </Field>
-        )}
-        <Checkbox label={`🎓 ${t.monthly}`} {...register("monthlyRentalEnabled")} />
-        {monthlyRentalEnabled && (
-          <Field label={t.monthlyPrice} error={errors.monthlyPrice && t.errMonthly}>
-            <input type="number" min={1} {...register("monthlyPrice")} className={inputClass} />
-          </Field>
-        )}
-      </section>
-
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.amenities}</h2>
-        {Object.entries(amenitiesByCategory).map(([category, list]) => (
-          <div key={category} className="flex flex-col gap-xs">
-            <p className="text-xs font-medium uppercase tracking-wide text-ink-secondary">
-              {category}
-            </p>
-            <div className="flex flex-wrap gap-sm">
-              {list.map((a) => (
-                <button
-                  type="button"
-                  key={a.id}
-                  onClick={() => toggleAmenity(a.id)}
-                  className={`rounded-full border px-md py-xs text-sm ${
-                    amenityIds.includes(a.id)
-                      ? "border-turquoise bg-turquoise-light text-turquoise-dark"
-                      : "border-border text-ink-secondary"
-                  }`}
-                >
-                  {a.name}
-                </button>
-              ))}
-            </div>
+      <div className={step === 2 ? "flex flex-col gap-xl" : "hidden"}>
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.pricing}</h2>
+          <div className="grid grid-cols-2 gap-md">
+            <Field label={t.pricePerNight} error={errors.pricePerNight && t.errPrice}>
+              <input type="number" min={1} {...register("pricePerNight")} className={inputClass} />
+            </Field>
+            <Field label={t.minStay}>
+              <input type="number" min={1} {...register("minStayNights")} className={inputClass} />
+            </Field>
           </div>
-        ))}
-      </section>
 
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.visibility}</h2>
-        <Field label={t.status} hint={t.publishRules}>
-          <select {...register("status")} className={inputClass}>
-            <option value="draft">{t.draft}</option>
-            <option value="published">{t.published}</option>
-          </select>
-        </Field>
-      </section>
+          <div className="flex flex-col gap-xs rounded-md border border-turquoise/30 bg-turquoise-light/50 px-md py-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-turquoise-dark">
+              {t.recTitle}
+            </p>
+            {comparableStats ? (
+              <>
+                <p className="text-sm text-ink">
+                  {t.recBody(
+                    typeLabel,
+                    watchedCompoundId ? t.recScopeCompound : t.recScopeAll,
+                    money(locale, comparableStats.averagePricePerNight),
+                    comparableStats.sampleSize,
+                  )}
+                </p>
+                <p className="text-xs text-ink-secondary">
+                  {t.recRange(
+                    money(locale, Math.round(comparableStats.averagePricePerNight * 0.85)),
+                    money(locale, Math.round(comparableStats.averagePricePerNight * 1.15)),
+                  )}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-ink-secondary">{t.recNone}</p>
+            )}
+          </div>
+
+          <Checkbox label={t.dayUse} {...register("dayUseEnabled")} />
+          {dayUseEnabled && (
+            <Field label={t.dayUsePrice} error={errors.dayUsePrice && t.errDayUse}>
+              <input type="number" min={1} {...register("dayUsePrice")} className={inputClass} />
+            </Field>
+          )}
+          <Checkbox label={`🎓 ${t.monthly}`} {...register("monthlyRentalEnabled")} />
+          {monthlyRentalEnabled && (
+            <Field label={t.monthlyPrice} error={errors.monthlyPrice && t.errMonthly}>
+              <input type="number" min={1} {...register("monthlyPrice")} className={inputClass} />
+            </Field>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.houseRules}</h2>
+          <div className="flex flex-wrap gap-lg">
+            <Checkbox label={t.pets} {...register("petsAllowed")} />
+            <Checkbox label={t.parties} {...register("partiesAllowed")} />
+            <Checkbox label={t.smoking} {...register("smokingAllowed")} />
+            <Checkbox label={t.photography} {...register("commercialPhotographyAllowed")} />
+          </div>
+          <Field label={t.cancellation}>
+            <select {...register("cancellationPolicy")} className={inputClass}>
+              {cancellationPolicyOptions.map((p) => (
+                <option key={p} value={p}>
+                  {policies[p].label} — {policies[p].description}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </section>
+      </div>
+
+      <div className={step === 3 ? "flex flex-col gap-xl" : "hidden"}>
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.amenities}</h2>
+          {Object.entries(amenitiesByCategory).map(([category, list]) => (
+            <div key={category} className="flex flex-col gap-xs">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-secondary">
+                {category}
+              </p>
+              <div className="flex flex-wrap gap-sm">
+                {list.map((a) => (
+                  <button
+                    type="button"
+                    key={a.id}
+                    onClick={() => toggleAmenity(a.id)}
+                    className={`rounded-full border px-md py-xs text-sm ${
+                      amenityIds.includes(a.id)
+                        ? "border-turquoise bg-turquoise-light text-turquoise-dark"
+                        : "border-border text-ink-secondary"
+                    }`}
+                  >
+                    {a.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </section>
+
+        <section className="flex flex-col gap-md">
+          <h2 className="font-display text-lg font-semibold">{t.visibility}</h2>
+          <Field label={t.status} hint={t.publishRules}>
+            <select {...register("status")} className={inputClass}>
+              <option value="draft">{t.draft}</option>
+              <option value="published">{t.published}</option>
+            </select>
+          </Field>
+        </section>
+      </div>
 
       {publishBlockers.length > 0 && (
         <div className="rounded-lg bg-butter-soft px-md py-sm text-sm">
@@ -624,19 +763,58 @@ export function PropertyForm({
       )}
       {serverError && <p className="text-sm text-red-600">{serverError}</p>}
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-fit rounded-md bg-turquoise px-xl py-md font-medium text-white hover:bg-turquoise-dark disabled:opacity-60"
-      >
-        {isSubmitting ? t.saving : existing ? t.save : t.create}
-      </button>
+      <div className="sticky bottom-0 -mx-lg flex items-center justify-between gap-sm border-t border-border bg-[#F7F8FA]/95 px-lg py-md backdrop-blur">
+        <button
+          type="button"
+          onClick={() => goTo(step - 1)}
+          disabled={step === 0}
+          className="flex items-center gap-xs rounded-xl px-md py-2.5 text-sm font-medium text-ink-secondary hover:text-ink disabled:invisible"
+        >
+          <Icon name="arrow" className="size-4 -scale-x-100 rtl:scale-x-100" />
+          {f.back}
+        </button>
+        <div className="flex items-center gap-sm">
+          {existing && (
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className={`rounded-xl px-lg py-2.5 text-sm font-semibold disabled:opacity-60 ${
+                step === lastStep
+                  ? "bg-turquoise text-white hover:bg-turquoise-dark"
+                  : "border border-border bg-surface text-ink hover:border-turquoise"
+              }`}
+            >
+              {isSubmitting ? t.saving : t.save}
+            </button>
+          )}
+          {step < lastStep ? (
+            <button
+              type="button"
+              onClick={() => void nextStep()}
+              className="flex items-center gap-xs rounded-xl bg-turquoise px-lg py-2.5 text-sm font-semibold text-white hover:bg-turquoise-dark"
+            >
+              {f.next}
+              <Icon name="arrow" className="size-4 rtl:-scale-x-100" />
+            </button>
+          ) : (
+            !existing && (
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="rounded-xl bg-turquoise px-xl py-2.5 text-sm font-semibold text-white hover:bg-turquoise-dark disabled:opacity-60"
+              >
+                {isSubmitting ? t.saving : t.create}
+              </button>
+            )
+          )}
+        </div>
+      </div>
     </form>
   );
 }
 
 const inputClass =
-  "w-full rounded-sm border border-border bg-surface px-md py-sm text-ink outline-none focus:border-turquoise";
+  "w-full rounded-xl border border-border bg-surface px-md py-2.5 text-ink outline-none transition focus:border-turquoise focus:ring-2 focus:ring-turquoise/20";
 
 function Field({
   label,

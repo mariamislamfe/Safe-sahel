@@ -9,8 +9,12 @@ import { date, money } from "@/lib/i18n/format";
 import { GuestReviewForm } from "@/components/guest-review-form";
 import { BookingStatusBadge, ExpiryCountdown } from "@/components/booking-bits";
 import { OwnerRespondButtons } from "@/components/owner-booking-actions";
+import { EmptyState, FilterTabs, PageHeader, Pill, Thumb } from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
-export default async function OwnerBookingsPage() {
+type Tab = "pending" | "upcoming" | "past";
+
+export default async function OwnerBookingsPage(props: PageProps<"/owner/bookings">) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -20,6 +24,7 @@ export default async function OwnerBookingsPage() {
   const locale = await getLocale();
   const t = ownerDict[locale].bookings;
   const c = common[locale];
+  const params = await props.searchParams;
   const bookings = await getOwnerBookings(user.id);
 
   const { data: reviewedRows } = bookings.length
@@ -42,107 +47,133 @@ export default async function OwnerBookingsPage() {
     .sort((a, b) => a.checkIn.localeCompare(b.checkIn));
   const past = bookings.filter((b) => !pending.includes(b) && !upcoming.includes(b));
 
-  const Row = ({ b, children }: { b: OwnerBookingItem; children?: React.ReactNode }) => (
-    <div className="flex flex-col gap-sm rounded-2xl border border-border p-md">
-      <div className="flex flex-wrap items-start justify-between gap-sm">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <Link
-            href={`/owner/bookings/${b.id}`}
-            className="font-display font-semibold text-ink hover:text-turquoise-dark"
-          >
-            {b.propertyTitle}
-          </Link>
-          <p className="text-sm text-ink-secondary">
-            {b.guestName ?? t.guest} · {date(locale, b.checkIn)} → {date(locale, b.checkOut)} ·{" "}
-            {c.nights(b.nights)} · {c.guests(b.guestsCount)}
-          </p>
-          <p className="text-sm">
-            <span className="font-mono text-xs text-ink-secondary">{b.reference}</span> ·{" "}
-            <span className="font-medium">{money(locale, b.basePrice)}</span>
-          </p>
-        </div>
-        <div className="flex flex-col items-end gap-xs">
-          <BookingStatusBadge status={b.status} />
-          {b.status === "pending" && b.expiresAt && (
-            <ExpiryCountdown expiresAt={b.expiresAt} prefix={t.replyWithin} />
-          )}
-        </div>
-      </div>
-      {b.guestNote && (
-        <p className="rounded-lg bg-surface-soft px-md py-sm text-sm text-ink-secondary">
-          <span className="font-medium text-ink">{t.note}:</span> {b.guestNote}
-        </p>
-      )}
-      {children}
-    </div>
-  );
+  // Land on whatever needs the host first.
+  const requested = params.tab;
+  const tab: Tab =
+    requested === "pending" || requested === "upcoming" || requested === "past"
+      ? requested
+      : pending.length > 0
+        ? "pending"
+        : "upcoming";
+
+  const lists: Record<Tab, OwnerBookingItem[]> = { pending, upcoming, past };
+  const empties: Record<Tab, string> = {
+    pending: t.pendingEmpty,
+    upcoming: t.upcomingEmpty,
+    past: t.pastEmpty,
+  };
+  const current = lists[tab];
 
   return (
-    <div className="flex flex-col gap-2xl">
-      <section className="flex flex-col gap-md">
-        <div className="flex flex-col gap-xs">
-          <h1 className="font-display text-2xl font-bold">
-            {t.pendingTitle}{" "}
-            {pending.length > 0 && <span className="text-red-600">({pending.length})</span>}
-          </h1>
-          <p className="text-sm text-ink-secondary">{t.pendingHint}</p>
-        </div>
-        {pending.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-border p-lg text-center text-sm text-ink-secondary">
-            {t.pendingEmpty}
-          </p>
-        ) : (
-          pending.map((b) => (
-            <Row key={b.id} b={b}>
-              <OwnerRespondButtons bookingId={b.id} />
-            </Row>
-          ))
-        )}
-      </section>
+    <>
+      <PageHeader title={t.title} description={t.pendingHint} />
 
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.upcomingTitle}</h2>
-        {upcoming.length === 0 ? (
-          <p className="text-sm text-ink-secondary">{t.upcomingEmpty}</p>
-        ) : (
-          upcoming.map((b) => (
-            <Row key={b.id} b={b}>
-              <div className="flex flex-wrap items-center justify-between gap-sm text-sm">
-                <div className="flex flex-wrap gap-xs">
-                  <span
-                    className={`rounded-full px-sm py-0.5 text-xs font-medium ${b.idsUploaded >= b.adultsCount ? "bg-turquoise-light text-turquoise-dark" : "bg-butter-soft text-ink"}`}
-                  >
-                    🪪 {t.ids(b.idsUploaded, b.adultsCount)}
-                  </span>
-                  {b.checklistDone && (
-                    <span className="rounded-full bg-turquoise-light px-sm py-0.5 text-xs font-medium text-turquoise-dark">
-                      {t.checklistDone}
-                    </span>
+      <FilterTabs
+        items={[
+          {
+            href: "/owner/bookings?tab=pending",
+            label: t.pendingTitle,
+            active: tab === "pending",
+            count: pending.length,
+          },
+          {
+            href: "/owner/bookings?tab=upcoming",
+            label: t.upcomingTitle,
+            active: tab === "upcoming",
+            count: upcoming.length,
+          },
+          {
+            href: "/owner/bookings?tab=past",
+            label: t.pastTitle,
+            active: tab === "past",
+            count: past.length,
+          },
+        ]}
+      />
+
+      {current.length === 0 ? (
+        <EmptyState icon={tab === "pending" ? "check" : "calendar"} title={empties[tab]} />
+      ) : (
+        <div className="flex flex-col gap-sm">
+          {current.map((b) => (
+            <article
+              key={b.id}
+              className={`flex flex-col gap-md rounded-2xl border bg-surface p-lg shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${
+                b.status === "pending" ? "border-amber-200" : "border-border"
+              }`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-sm">
+                <div className="flex min-w-0 items-center gap-md">
+                  <Thumb src={b.coverImageUrl} alt={b.propertyTitle} />
+                  <div className="flex min-w-0 flex-col gap-0.5">
+                    <p className="font-semibold">{b.guestName ?? t.guest}</p>
+                    <Link
+                      href={`/owner/bookings/${b.id}`}
+                      className="truncate text-sm text-ink-secondary hover:text-turquoise-dark"
+                    >
+                      {b.propertyTitle}
+                    </Link>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-xs">
+                  {b.status === "pending" && b.expiresAt ? (
+                    <ExpiryCountdown expiresAt={b.expiresAt} prefix={t.replyWithin} />
+                  ) : (
+                    <BookingStatusBadge status={b.status} />
                   )}
                 </div>
-                <Link href={`/owner/bookings/${b.id}`} className="font-medium text-turquoise-dark">
-                  {t.open} →
-                </Link>
               </div>
-            </Row>
-          ))
-        )}
-      </section>
 
-      <section className="flex flex-col gap-md">
-        <h2 className="font-display text-lg font-semibold">{t.pastTitle}</h2>
-        {past.length === 0 ? (
-          <p className="text-sm text-ink-secondary">{t.pastEmpty}</p>
-        ) : (
-          past.map((b) => (
-            <Row key={b.id} b={b}>
+              <dl className="grid grid-cols-2 gap-sm rounded-xl bg-surface-soft/70 p-md text-sm sm:grid-cols-4">
+                <div className="col-span-2 flex flex-col">
+                  <dt className="text-xs text-ink-secondary">{c.nights(b.nights)}</dt>
+                  <dd className="font-medium">
+                    {date(locale, b.checkIn)} → {date(locale, b.checkOut)}
+                  </dd>
+                </div>
+                <div className="flex flex-col">
+                  <dt className="text-xs text-ink-secondary">{c.guests(b.guestsCount)}</dt>
+                  <dd className="font-mono text-xs">{b.reference}</dd>
+                </div>
+                <div className="flex flex-col">
+                  <dt className="text-xs text-ink-secondary">{t.value}</dt>
+                  <dd className="font-semibold tabular-nums">{money(locale, b.basePrice)}</dd>
+                </div>
+              </dl>
+
+              {b.guestNote && (
+                <p className="rounded-xl border border-border px-md py-sm text-sm text-ink-secondary">
+                  <span className="font-medium text-ink">{t.note}:</span> {b.guestNote}
+                </p>
+              )}
+
+              {b.status === "pending" && <OwnerRespondButtons bookingId={b.id} />}
+
+              {tab === "upcoming" && (
+                <div className="flex flex-wrap items-center justify-between gap-sm">
+                  <div className="flex flex-wrap gap-xs">
+                    <Pill tone={b.idsUploaded >= b.adultsCount ? "success" : "warn"}>
+                      {t.ids(b.idsUploaded, b.adultsCount)}
+                    </Pill>
+                    {b.checklistDone && <Pill tone="success">{t.checklistDone}</Pill>}
+                  </div>
+                  <Link
+                    href={`/owner/bookings/${b.id}`}
+                    className="flex items-center gap-xs text-sm font-semibold text-turquoise-dark"
+                  >
+                    {t.open}
+                    <Icon name="arrow" className="size-4 rtl:-scale-x-100" />
+                  </Link>
+                </div>
+              )}
+
               {b.status === "confirmed" && b.checkOut < today && !reviewed.has(b.id) && (
                 <GuestReviewForm bookingId={b.id} ownerId={user.id} guestId={b.guestId} />
               )}
-            </Row>
-          ))
-        )}
-      </section>
-    </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

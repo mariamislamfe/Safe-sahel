@@ -4,7 +4,9 @@ import { getLocale } from "@/lib/locale";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteVisitTracker } from "@/components/tracking";
+import { SiteChrome } from "@/components/site-chrome";
 import { LocaleProvider } from "@/lib/i18n/locale-provider";
+import { FeedbackProvider } from "@/components/feedback";
 import "./globals.css";
 
 const display = Plus_Jakarta_Sans({
@@ -43,10 +45,15 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="flex min-h-screen flex-col">
         <LocaleProvider locale={locale}>
-          <SiteVisitTracker />
-          <SiteHeader locale={locale} />
-          <div className="flex-1 pt-16">{children}</div>
-          <SiteFooter locale={locale} />
+          <FeedbackProvider>
+            <SiteVisitTracker />
+            <SiteChrome
+              header={<SiteHeader locale={locale} />}
+              footer={<SiteFooter locale={locale} />}
+            >
+              {children}
+            </SiteChrome>
+          </FeedbackProvider>
         </LocaleProvider>
       </body>
     </html>

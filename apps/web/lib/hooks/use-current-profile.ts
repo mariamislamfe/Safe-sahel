@@ -13,6 +13,8 @@ export type CurrentProfile = {
   phone: string | null;
   role: UserRoleEnum;
   verified: boolean;
+  /** Founder or an active team member — can open /admin. */
+  canAccessAdmin: boolean;
 };
 
 /**
@@ -38,11 +40,14 @@ export function useCurrentProfile() {
       return;
     }
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("full_name, avatar_url, username, phone, role, verified")
-      .eq("id", user.id)
-      .single();
+    const [{ data }, { data: access }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("full_name, avatar_url, username, phone, role, verified")
+        .eq("id", user.id)
+        .single(),
+      supabase.rpc("my_admin_access"),
+    ]);
 
     setProfile({
       id: user.id,
@@ -53,6 +58,7 @@ export function useCurrentProfile() {
       phone: data?.phone ?? null,
       role: data?.role ?? "guest",
       verified: data?.verified ?? false,
+      canAccessAdmin: data?.role === "admin" || !!access,
     });
     setLoading(false);
   }, []);

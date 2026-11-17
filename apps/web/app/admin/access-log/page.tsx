@@ -3,6 +3,8 @@ import { getLocale } from "@/lib/locale";
 import { adminDict } from "@/lib/i18n/admin";
 import { dateTime } from "@/lib/i18n/format";
 import { profileMap } from "@/lib/queries/admin";
+import { requireSection } from "@/lib/admin-access";
+import { EmptyState, PageHeader, Pill, Table, Td, Th, Tr } from "@/components/admin/ui";
 
 const KIND: Record<string, { en: string; ar: string }> = {
   verification_id: { en: "Owner National ID", ar: "بطاقة مالك" },
@@ -13,6 +15,7 @@ const KIND: Record<string, { en: string; ar: string }> = {
 };
 
 export default async function AdminAccessLogPage() {
+  await requireSection("accessLog");
   const supabase = await createClient();
   const locale = await getLocale();
   const t = adminDict[locale].accessLog;
@@ -32,50 +35,56 @@ export default async function AdminAccessLogPage() {
     : { data: [] as { id: string; reference: string }[] };
   const ref = new Map((bookings ?? []).map((b) => [b.id, b.reference]));
 
+  const ROLE_TONE: Record<string, "info" | "success" | "neutral" | "warn"> = {
+    admin: "info",
+    staff: "warn",
+    owner: "success",
+    self: "neutral",
+  };
+
   return (
-    <div className="flex flex-col gap-lg">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">{t.body}</p>
-      </div>
+    <>
+      <PageHeader title={t.title} description={t.body} count={(rows ?? []).length} />
       {(rows ?? []).length === 0 ? (
-        <p className="text-sm text-ink-secondary">{t.empty}</p>
+        <EmptyState icon="eye" title={t.empty} />
       ) : (
-        <div className="overflow-x-auto rounded-2xl border border-border">
-          <table className="w-full min-w-[720px] text-sm">
-            <thead className="bg-surface-soft text-ink-secondary">
-              <tr>
-                <th className="p-md text-start font-medium">{t.when}</th>
-                <th className="p-md text-start font-medium">{t.who}</th>
-                <th className="p-md text-start font-medium">{t.role}</th>
-                <th className="p-md text-start font-medium">{t.kind}</th>
-                <th className="p-md text-start font-medium">{t.subject}</th>
-                <th className="p-md text-start font-medium">{t.booking}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(rows ?? []).map((r) => (
-                <tr key={r.id} className="border-t border-border">
-                  <td className="whitespace-nowrap p-md">{dateTime(locale, r.accessed_at)}</td>
-                  <td className="p-md">
-                    {r.accessor_id
-                      ? (people.get(r.accessor_id)?.name ?? r.accessor_id.slice(0, 8))
-                      : "—"}
-                  </td>
-                  <td className="p-md">{r.accessor_role}</td>
-                  <td className="p-md">{KIND[r.document_kind]?.[locale] ?? r.document_kind}</td>
-                  <td className="p-md">
-                    {r.subject_profile_id ? (people.get(r.subject_profile_id)?.name ?? "—") : "—"}
-                  </td>
-                  <td className="p-md font-mono text-xs">
-                    {r.booking_id ? (ref.get(r.booking_id) ?? "—") : "—"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table minWidth={760}>
+          <thead>
+            <tr>
+              <Th>{t.when}</Th>
+              <Th>{t.who}</Th>
+              <Th>{t.role}</Th>
+              <Th>{t.kind}</Th>
+              <Th>{t.subject}</Th>
+              <Th>{t.booking}</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {(rows ?? []).map((r) => (
+              <Tr key={r.id}>
+                <Td className="whitespace-nowrap text-ink-secondary">
+                  {dateTime(locale, r.accessed_at)}
+                </Td>
+                <Td className="font-medium">
+                  {r.accessor_id
+                    ? (people.get(r.accessor_id)?.name ?? r.accessor_id.slice(0, 8))
+                    : "—"}
+                </Td>
+                <Td>
+                  <Pill tone={ROLE_TONE[r.accessor_role] ?? "neutral"}>{r.accessor_role}</Pill>
+                </Td>
+                <Td>{KIND[r.document_kind]?.[locale] ?? r.document_kind}</Td>
+                <Td>
+                  {r.subject_profile_id ? (people.get(r.subject_profile_id)?.name ?? "—") : "—"}
+                </Td>
+                <Td className="font-mono text-xs">
+                  {r.booking_id ? (ref.get(r.booking_id) ?? "—") : "—"}
+                </Td>
+              </Tr>
+            ))}
+          </tbody>
+        </Table>
       )}
-    </div>
+    </>
   );
 }

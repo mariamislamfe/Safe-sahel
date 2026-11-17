@@ -3,10 +3,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getHandoverDetail } from "@/lib/queries/handover";
 import { AdminHandoverReview } from "@/components/admin-handover-review";
+import { requireSection } from "@/lib/admin-access";
 
 export default async function AdminHandoverDetailPage(
   props: PageProps<"/admin/handovers/[bookingId]">,
 ) {
+  await requireSection("handovers");
   const { bookingId } = await props.params;
   const supabase = await createClient();
   const {

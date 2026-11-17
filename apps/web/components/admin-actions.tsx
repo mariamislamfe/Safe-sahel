@@ -6,7 +6,10 @@ import { rpcErrorCode } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/client";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { adminDict } from "@/lib/i18n/admin";
+import { adminShellDict } from "@/lib/i18n/admin-shell";
 import { errorText } from "@/lib/i18n/common";
+
+type Result = PromiseLike<{ error: { message: string } | null }>;
 
 /** Run an admin action, surface DB errors, refresh the server page. */
 function useAction() {
@@ -14,23 +17,97 @@ function useAction() {
   const locale = useLocale();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function run(fn: () => PromiseLike<{ error: { message: string } | null }>) {
+  async function run(fn: () => Result) {
     setBusy(true);
     setError(null);
     const { error: e } = await fn();
     setBusy(false);
-    if (e) setError(errorText(locale, rpcErrorCode(e.message)) + ` (${e.message})`);
-    else router.refresh();
+    if (e) {
+      setError(errorText(locale, rpcErrorCode(e.message)));
+      return false;
+    }
+    router.refresh();
+    return true;
   }
   return { busy, error, run, locale };
 }
 
-const primary =
-  "rounded-md bg-turquoise px-md py-xs text-sm font-semibold text-white hover:bg-turquoise-dark disabled:opacity-60";
-const ghost =
-  "rounded-md border border-border px-md py-xs text-sm font-medium text-ink-secondary hover:border-red-300 hover:text-red-600 disabled:opacity-60";
+export const btn = {
+  primary:
+    "inline-flex items-center justify-center gap-xs rounded-lg bg-turquoise px-md py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-turquoise-dark disabled:opacity-50",
+  secondary:
+    "inline-flex items-center justify-center gap-xs rounded-lg border border-border bg-surface px-md py-2 text-sm font-medium text-ink transition hover:border-ink-secondary disabled:opacity-50",
+  danger:
+    "inline-flex items-center justify-center gap-xs rounded-lg border border-red-200 bg-surface px-md py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50",
+  small:
+    "inline-flex items-center gap-1 rounded-md border border-border bg-surface px-sm py-1 text-xs font-medium text-ink transition hover:border-ink-secondary disabled:opacity-50",
+  smallDanger:
+    "inline-flex items-center gap-1 rounded-md border border-red-200 bg-surface px-sm py-1 text-xs font-medium text-red-700 transition hover:bg-red-50 disabled:opacity-50",
+};
+
 const Err = ({ e }: { e: string | null }) =>
-  e ? <p className="text-xs text-red-600">{e}</p> : null;
+  e ? <p className="text-xs font-medium text-red-600">{e}</p> : null;
+
+/**
+ * A button that opens an inline reason box (instead of the browser's prompt),
+ * then confirms. `required` blocks an empty reason.
+ */
+function ReasonAction({
+  label,
+  prompt,
+  className,
+  required = true,
+  onConfirm,
+  busy,
+}: {
+  label: string;
+  prompt: string;
+  className: string;
+  required?: boolean;
+  onConfirm: (reason: string) => Promise<boolean>;
+  busy: boolean;
+}) {
+  const locale = useLocale();
+  const s = adminShellDict[locale].team;
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  if (!open)
+    return (
+      <button type="button" disabled={busy} onClick={() => setOpen(true)} className={className}>
+        {label}
+      </button>
+    );
+  return (
+    <div className="flex w-full flex-col gap-xs rounded-lg border border-border bg-surface-soft/60 p-sm">
+      <label className="text-xs font-medium text-ink-secondary">{prompt}</label>
+      <textarea
+        autoFocus
+        rows={2}
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        className="w-full rounded-md border border-border bg-surface px-sm py-xs text-sm outline-none focus:border-turquoise"
+      />
+      <div className="flex gap-xs">
+        <button
+          type="button"
+          disabled={busy || (required && !reason.trim())}
+          onClick={async () => {
+            if (await onConfirm(reason.trim())) {
+              setOpen(false);
+              setReason("");
+            }
+          }}
+          className={btn.smallDanger}
+        >
+          {label}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className={btn.small}>
+          {s.cancel}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function ReviewVerification({
   requestId,
@@ -50,7 +127,7 @@ export function ReviewVerification({
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="rounded-sm border border-border bg-surface px-sm py-xs text-sm text-ink"
+          className="rounded-lg border border-border bg-surface px-sm py-2 text-sm text-ink outline-none focus:border-turquoise"
         />
       </label>
       <div className="flex flex-wrap gap-sm">
@@ -65,27 +142,25 @@ export function ReviewVerification({
               }),
             )
           }
-          className={primary}
+          className={`${btn.primary} flex-1`}
         >
           ✓ {t.approve}
         </button>
-        <button
-          disabled={busy}
-          onClick={() => {
-            const reason = prompt(t.rejectReason);
-            if (reason)
-              run(() =>
-                supabase.rpc("review_verification", {
-                  p_request_id: requestId,
-                  p_approve: false,
-                  p_reason: reason,
-                }),
-              );
-          }}
-          className={ghost}
-        >
-          {t.reject}
-        </button>
+        <ReasonAction
+          busy={busy}
+          label={t.reject}
+          prompt={t.rejectReason}
+          className={btn.danger}
+          onConfirm={(reason) =>
+            run(() =>
+              supabase.rpc("review_verification", {
+                p_request_id: requestId,
+                p_approve: false,
+                p_reason: reason,
+              }),
+            )
+          }
+        />
       </div>
       <Err e={error} />
     </div>
@@ -98,33 +173,31 @@ export function ReviewAuthorization({ id }: { id: string }) {
   const supabase = createClient();
   return (
     <div className="flex flex-col gap-xs">
-      <div className="flex gap-sm">
+      <div className="flex flex-wrap gap-sm">
         <button
           disabled={busy}
           onClick={() =>
             run(() => supabase.rpc("review_broker_authorization", { p_id: id, p_approve: true }))
           }
-          className={primary}
+          className={btn.primary}
         >
           ✓ {t.approve}
         </button>
-        <button
-          disabled={busy}
-          onClick={() => {
-            const reason = prompt(t.rejectReason);
-            if (reason)
-              run(() =>
-                supabase.rpc("review_broker_authorization", {
-                  p_id: id,
-                  p_approve: false,
-                  p_reason: reason,
-                }),
-              );
-          }}
-          className={ghost}
-        >
-          {t.reject}
-        </button>
+        <ReasonAction
+          busy={busy}
+          label={t.reject}
+          prompt={t.rejectReason}
+          className={btn.danger}
+          onConfirm={(reason) =>
+            run(() =>
+              supabase.rpc("review_broker_authorization", {
+                p_id: id,
+                p_approve: false,
+                p_reason: reason,
+              }),
+            )
+          }
+        />
       </div>
       <Err e={error} />
     </div>
@@ -141,21 +214,19 @@ export function ReviewPayment({ id }: { id: string }) {
         <button
           disabled={busy}
           onClick={() => run(() => supabase.rpc("approve_payment", { p_payment_id: id }))}
-          className={primary}
+          className={btn.primary}
         >
           ✓ {t.approve}
         </button>
-        <button
-          disabled={busy}
-          onClick={() => {
-            const reason = prompt(t.rejectReason);
-            if (reason)
-              run(() => supabase.rpc("reject_payment", { p_payment_id: id, p_reason: reason }));
-          }}
-          className={ghost}
-        >
-          {t.reject}
-        </button>
+        <ReasonAction
+          busy={busy}
+          label={t.reject}
+          prompt={t.rejectReason}
+          className={btn.danger}
+          onConfirm={(reason) =>
+            run(() => supabase.rpc("reject_payment", { p_payment_id: id, p_reason: reason }))
+          }
+        />
       </div>
       <Err e={error} />
     </div>
@@ -178,92 +249,57 @@ export function ListingAdminActions({
   const { busy, error, run, locale } = useAction();
   const t = adminDict[locale].listings;
   const supabase = createClient();
-  const small =
-    "rounded px-sm py-0.5 text-xs font-medium border border-border hover:border-turquoise disabled:opacity-60";
+  const moderate = (action: "unpublish" | "suspend" | "restore" | "clear_flag", reason?: string) =>
+    run(() =>
+      supabase.rpc("admin_moderate_listing", {
+        p_property_id: propertyId,
+        p_action: action,
+        p_reason: reason ?? null,
+      }),
+    );
   return (
     <div className="flex flex-col gap-xs">
       <div className="flex flex-wrap gap-xs">
         {status === "published" && (
-          <button
-            disabled={busy}
-            className={small}
-            onClick={() => {
-              const reason = prompt(t.reasonPrompt);
-              if (reason !== null)
-                run(() =>
-                  supabase
-                    .from("properties")
-                    .update({ status: "draft", unpublished_reason: reason || "admin" })
-                    .eq("id", propertyId),
-                );
-            }}
-          >
-            {t.unpublish}
-          </button>
+          <ReasonAction
+            busy={busy}
+            label={t.unpublish}
+            prompt={t.reasonPrompt}
+            className={btn.small}
+            required={false}
+            onConfirm={(reason) => moderate("unpublish", reason)}
+          />
         )}
         {status !== "suspended" ? (
-          <button
-            disabled={busy}
-            className={`${small} text-red-700`}
-            onClick={() => {
-              const reason = prompt(t.reasonPrompt);
-              if (reason)
-                run(() =>
-                  supabase
-                    .from("properties")
-                    .update({ status: "suspended", unpublished_reason: reason })
-                    .eq("id", propertyId),
-                );
-            }}
-          >
-            {t.suspend}
-          </button>
+          <ReasonAction
+            busy={busy}
+            label={t.suspend}
+            prompt={t.reasonPrompt}
+            className={btn.smallDanger}
+            onConfirm={(reason) => moderate("suspend", reason)}
+          />
         ) : (
-          <button
-            disabled={busy}
-            className={small}
-            onClick={() =>
-              run(() =>
-                supabase
-                  .from("properties")
-                  .update({ status: "draft", unpublished_reason: null })
-                  .eq("id", propertyId),
-              )
-            }
-          >
+          <button disabled={busy} className={btn.small} onClick={() => moderate("restore")}>
             {t.restore}
           </button>
         )}
         {flagged && (
-          <button
-            disabled={busy}
-            className={small}
-            onClick={() =>
-              run(() =>
-                supabase
-                  .from("properties")
-                  .update({ flagged_for_review: false, flag_reason: null })
-                  .eq("id", propertyId),
-              )
-            }
-          >
+          <button disabled={busy} className={btn.small} onClick={() => moderate("clear_flag")}>
             {t.clearFlag}
           </button>
         )}
         {ownerVerified && (
-          <button
-            disabled={busy}
-            className={`${small} text-red-700`}
-            onClick={() => {
-              const reason = prompt(t.revokePrompt);
-              if (reason)
-                run(() =>
-                  supabase.rpc("revoke_verification", { p_profile_id: ownerId, p_reason: reason }),
-                );
-            }}
-          >
-            {t.revokeBadge}
-          </button>
+          <ReasonAction
+            busy={busy}
+            label={t.revokeBadge}
+            prompt={t.revokePrompt}
+            className={btn.smallDanger}
+            onConfirm={(reason) =>
+              run(() =>
+                supabase.rpc("revoke_verification", { p_profile_id: ownerId, p_reason: reason }),
+              )
+            }
+          />
         )}
       </div>
       <Err e={error} />
@@ -274,30 +310,18 @@ export function ListingAdminActions({
 export function DuplicateFlagActions({ id }: { id: string }) {
   const { busy, error, run, locale } = useAction();
   const t = adminDict[locale].listings;
-  const supabase = createClient();
   const set = (status: "dismissed" | "confirmed") =>
-    run(() =>
-      supabase
-        .from("listing_duplicate_flags")
-        .update({ status, reviewed_at: new Date().toISOString() })
-        .eq("id", id),
-    );
+    run(() => createClient().rpc("admin_review_duplicate", { p_flag_id: id, p_status: status }));
   return (
-    <div className="flex flex-wrap gap-xs">
-      <button
-        disabled={busy}
-        onClick={() => set("dismissed")}
-        className="rounded border border-border px-sm py-0.5 text-xs"
-      >
-        {t.dismiss}
-      </button>
-      <button
-        disabled={busy}
-        onClick={() => set("confirmed")}
-        className="rounded border border-red-300 px-sm py-0.5 text-xs text-red-700"
-      >
-        {t.confirmDup}
-      </button>
+    <div className="flex flex-col gap-xs">
+      <div className="flex flex-wrap gap-xs">
+        <button disabled={busy} onClick={() => set("dismissed")} className={btn.small}>
+          {t.dismiss}
+        </button>
+        <button disabled={busy} onClick={() => set("confirmed")} className={btn.smallDanger}>
+          {t.confirmDup}
+        </button>
+      </div>
       <Err e={error} />
     </div>
   );
@@ -306,27 +330,21 @@ export function DuplicateFlagActions({ id }: { id: string }) {
 export function RevokeStrike({ id }: { id: string }) {
   const { busy, error, run, locale } = useAction();
   const t = adminDict[locale].listings;
-  const supabase = createClient();
   return (
-    <span>
-      <button
-        disabled={busy}
-        onClick={() => {
-          const reason = prompt(t.reasonPrompt);
-          if (reason)
-            run(() =>
-              supabase
-                .from("owner_strikes")
-                .update({ revoked_at: new Date().toISOString(), revoke_reason: reason })
-                .eq("id", id),
-            );
-        }}
-        className="text-xs text-turquoise-dark underline"
-      >
-        {t.revokeStrike}
-      </button>
+    <div className="flex flex-col gap-xs">
+      <ReasonAction
+        busy={busy}
+        label={t.revokeStrike}
+        prompt={t.reasonPrompt}
+        className={btn.small}
+        onConfirm={(reason) =>
+          run(() =>
+            createClient().rpc("admin_revoke_strike", { p_strike_id: id, p_reason: reason }),
+          )
+        }
+      />
       <Err e={error} />
-    </span>
+    </div>
   );
 }
 
@@ -342,7 +360,7 @@ export function GrantGuarantee({ subscriptionId }: { subscriptionId: string }) {
             createClient().rpc("grant_guarantee_month", { p_subscription_id: subscriptionId }),
           )
         }
-        className={primary}
+        className={btn.primary}
       >
         🎁 {t.grant}
       </button>
@@ -355,18 +373,13 @@ export function CancelFeatured({ slotId }: { slotId: string }) {
   const { busy, error, run, locale } = useAction();
   const t = adminDict[locale].featured;
   return (
-    <span>
+    <span className="flex flex-col gap-xs">
       <button
         disabled={busy}
         onClick={() =>
-          run(() =>
-            createClient()
-              .from("featured_slots")
-              .update({ cancelled_at: new Date().toISOString() })
-              .eq("id", slotId),
-          )
+          run(() => createClient().rpc("admin_cancel_featured", { p_slot_id: slotId }))
         }
-        className="text-xs text-red-600 underline"
+        className={btn.smallDanger}
       >
         {t.cancel}
       </button>
@@ -387,7 +400,7 @@ export function GrantFeatured({ listings }: { listings: { id: string; title: str
         <select
           value={id}
           onChange={(e) => setId(e.target.value)}
-          className="rounded-sm border border-border bg-surface px-sm py-0.5 text-xs"
+          className="min-w-0 flex-1 rounded-md border border-border bg-surface px-sm py-1.5 text-sm"
         >
           <option value="">{t.pickListing}</option>
           {listings.map((l) => (
@@ -396,15 +409,17 @@ export function GrantFeatured({ listings }: { listings: { id: string; title: str
             </option>
           ))}
         </select>
-        <input
-          type="number"
-          min={1}
-          max={90}
-          value={days}
-          onChange={(e) => setDays(Number(e.target.value))}
-          className="w-14 rounded-sm border border-border bg-surface px-xs py-0.5 text-xs"
-          aria-label={t.days}
-        />
+        <label className="flex items-center gap-1 text-xs text-ink-secondary">
+          <input
+            type="number"
+            min={1}
+            max={90}
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="w-16 rounded-md border border-border bg-surface px-sm py-1.5 text-sm text-ink"
+          />
+          {t.days}
+        </label>
         <button
           disabled={busy || !id}
           onClick={() =>
@@ -412,7 +427,7 @@ export function GrantFeatured({ listings }: { listings: { id: string; title: str
               createClient().rpc("admin_grant_featured", { p_property_id: id, p_days: days }),
             )
           }
-          className="rounded bg-ink px-sm py-0.5 text-xs font-semibold text-white disabled:opacity-50"
+          className={btn.primary}
         >
           {t.grant}
         </button>

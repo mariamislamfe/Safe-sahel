@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@safe-sahel/types";
+import { notificationHref } from "@/lib/notifications";
 
 /**
  * Email delivery for the notifications outbox.
@@ -17,6 +18,8 @@ type Email = { subject: string; text: string };
 /** Bilingual email copy per notification kind (Arabic first, then English). */
 export function renderNotification(kind: string, payload: Record<string, unknown>): Email {
   const ref = typeof payload.reference === "string" ? payload.reference : "";
+  // Deep link to the exact booking/listing when the payload has its id.
+  const deep = notificationHref(kind, payload);
   const bilingual = (
     subjectAr: string,
     subjectEn: string,
@@ -25,7 +28,7 @@ export function renderNotification(kind: string, payload: Record<string, unknown
     path = "/owner",
   ): Email => ({
     subject: `${subjectAr} · ${subjectEn}`,
-    text: `${ar}\n\n${en}\n\n${SITE_URL}${path}`,
+    text: `${ar}\n\n${en}\n\n${SITE_URL}${deep !== "/" ? deep : path}`,
   });
 
   switch (kind) {

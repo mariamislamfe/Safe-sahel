@@ -2,7 +2,10 @@ import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { adminDict } from "@/lib/i18n/admin";
 import { ownerDict } from "@/lib/i18n/owner";
+import { common } from "@/lib/i18n/common";
 import { money, monthName, num } from "@/lib/i18n/format";
+import { requireSection } from "@/lib/admin-access";
+import { EmptyState, PageHeader, Section, Table, Td, Th, Tr } from "@/components/admin/ui";
 
 type Row = [string, { count: number; amount: number }];
 
@@ -11,38 +14,51 @@ function RevenueTable({
   labels,
   max,
   locale,
+  head,
 }: {
   rows: Row[];
   labels: string[];
   max: number;
   locale: "en" | "ar";
+  head: { label: string; count: string; amount: string };
 }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-border">
-      <table className="w-full text-sm">
-        <tbody>
-          {rows.map(([k, v], i) => (
-            <tr key={k} className="border-t border-border first:border-t-0">
-              <td className="p-md">{labels[i]}</td>
-              <td className="p-md text-end tabular-nums text-ink-secondary">{num(v.count)}</td>
-              <td className="w-1/3 p-md">
-                <div className="h-2 rounded-full bg-surface-soft">
-                  <div
-                    className="h-full rounded-full bg-turquoise"
-                    style={{ width: `${(v.amount / max) * 100}%` }}
-                  />
-                </div>
-              </td>
-              <td className="p-md text-end font-medium tabular-nums">{money(locale, v.amount)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table minWidth={480}>
+      <thead>
+        <tr>
+          <Th>{head.label}</Th>
+          <Th end>{head.count}</Th>
+          <Th />
+          <Th end>{head.amount}</Th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(([k, v], i) => (
+          <Tr key={k}>
+            <Td className="font-medium">{labels[i]}</Td>
+            <Td end className="tabular-nums text-ink-secondary">
+              {num(v.count)}
+            </Td>
+            <Td className="w-1/3">
+              <div className="h-2 rounded-full bg-surface-soft">
+                <div
+                  className="h-full rounded-full bg-turquoise"
+                  style={{ width: `${(v.amount / max) * 100}%` }}
+                />
+              </div>
+            </Td>
+            <Td end className="font-semibold tabular-nums">
+              {money(locale, v.amount)}
+            </Td>
+          </Tr>
+        ))}
+      </tbody>
+    </Table>
   );
 }
 
 export default async function AdminFinancePage() {
+  await requireSection("finance");
   const supabase = await createClient();
   const locale = await getLocale();
   const t = adminDict[locale].finance;
@@ -72,37 +88,44 @@ export default async function AdminFinancePage() {
   }
   const months = [...byMonth.entries()].sort((a, b) => b[0].localeCompare(a[0]));
   const max = Math.max(1, ...months.map(([, v]) => v.amount));
-
   const planRows = [...byPlan.entries()].sort((a, b) => b[1].amount - a[1].amount);
 
   return (
-    <div className="flex flex-col gap-xl">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">{t.body}</p>
-      </div>
-      <div className="rounded-3xl bg-ink p-lg text-white">
+    <>
+      <PageHeader title={t.title} description={t.body} />
+      <div className="flex flex-col gap-xs rounded-3xl bg-ink p-xl text-white shadow-lg">
         <p className="text-sm text-white/70">{t.total}</p>
         <p className="font-display text-4xl font-extrabold tabular-nums">{money(locale, total)}</p>
+        <p className="text-xs text-white/60">
+          {num((payments ?? []).length)} {t.count}
+        </p>
       </div>
-      <section className="flex flex-col gap-sm">
-        <h2 className="font-display text-lg font-semibold">{t.byMonth}</h2>
-        <RevenueTable
-          rows={months}
-          max={max}
-          locale={locale}
-          labels={months.map(([k]) => monthName(locale, new Date(`${k}-15T12:00:00Z`)))}
-        />
-      </section>
-      <section className="flex flex-col gap-sm">
-        <h2 className="font-display text-lg font-semibold">{t.byPlan}</h2>
-        <RevenueTable
-          rows={planRows}
-          max={max}
-          locale={locale}
-          labels={planRows.map(([k]) => (k === "featured" ? t.featured : (plans[k]?.name ?? k)))}
-        />
-      </section>
-    </div>
+      {months.length === 0 ? (
+        <EmptyState icon="wallet" title={common[locale].noResults} />
+      ) : (
+        <>
+          <Section title={t.byMonth}>
+            <RevenueTable
+              rows={months}
+              max={max}
+              locale={locale}
+              head={{ label: t.month, count: t.count, amount: t.amount }}
+              labels={months.map(([k]) => monthName(locale, new Date(`${k}-15T12:00:00Z`)))}
+            />
+          </Section>
+          <Section title={t.byPlan}>
+            <RevenueTable
+              rows={planRows}
+              max={max}
+              locale={locale}
+              head={{ label: "", count: t.count, amount: t.amount }}
+              labels={planRows.map(([k]) =>
+                k === "featured" ? t.featured : (plans[k]?.name ?? k),
+              )}
+            />
+          </Section>
+        </>
+      )}
+    </>
   );
 }

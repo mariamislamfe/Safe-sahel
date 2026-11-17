@@ -2,10 +2,14 @@ import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { adminDict } from "@/lib/i18n/admin";
 import { date } from "@/lib/i18n/format";
+import { requireSection } from "@/lib/admin-access";
 import { profileMap, propertyMap } from "@/lib/queries/admin";
 import { GrantGuarantee } from "@/components/admin-actions";
+import { Card, EmptyState, PageHeader, Pill, Section } from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
 export default async function AdminGuaranteePage() {
+  await requireSection("guarantee");
   const supabase = await createClient();
   const locale = await getLocale();
   const t = adminDict[locale].guarantee;
@@ -23,46 +27,50 @@ export default async function AdminGuaranteePage() {
   ];
 
   return (
-    <div className="flex flex-col gap-xl">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">{t.body}</p>
-        <p className="rounded-lg bg-butter-soft px-md py-sm text-sm font-medium">
-          لو ما جالكش ولا طلب حجز في أول 30 يوم من باقة الموسم، الشهر الجاي علينا
-        </p>
+    <>
+      <PageHeader title={t.title} description={t.body} />
+      <div className="flex items-start gap-sm rounded-xl border border-amber-200 bg-amber-50 px-md py-sm text-sm font-medium text-amber-900">
+        <Icon name="gift" className="mt-0.5 size-4 shrink-0" />
+        لو ما جالكش ولا طلب حجز في أول 30 يوم من باقة الموسم، الشهر الجاي علينا
       </div>
       {groups.map((g) => (
-        <section key={g.key} className="flex flex-col gap-sm">
-          <h2 className="font-display text-lg font-semibold">
-            {g.title} ({g.rows.length})
-          </h2>
+        <Section key={g.key} title={g.title} count={g.rows.length}>
           {g.rows.length === 0 ? (
-            g.key === "eligible" && <p className="text-sm text-ink-secondary">{t.empty}</p>
+            g.key === "eligible" ? (
+              <EmptyState icon="gift" title={t.empty} />
+            ) : null
           ) : (
-            <ul className="flex flex-col gap-sm">
+            <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
               {g.rows.map((r) => (
-                <li
-                  key={r.subscription_id}
-                  className="flex flex-wrap items-center justify-between gap-sm rounded-2xl border border-border p-md text-sm"
-                >
-                  <span>
-                    <span className="font-medium">{props.get(r.property_id)?.title ?? "—"}</span> ·{" "}
-                    {owners.get(r.owner_id)?.name ?? "—"}{" "}
-                    <span dir="ltr" className="text-ink-secondary">
-                      {owners.get(r.owner_id)?.phone}
-                    </span>
-                    <span className="block text-xs text-ink-secondary">
-                      {t.window}: {date(locale, r.starts_at)} → {date(locale, r.window_ends_at)} ·{" "}
-                      {t.requests}: {r.requests_in_window}
-                    </span>
-                  </span>
-                  {r.status === "eligible" && <GrantGuarantee subscriptionId={r.subscription_id} />}
-                </li>
+                <Card key={r.subscription_id} tone={g.key === "eligible" ? "warn" : "default"}>
+                  <div className="flex flex-col gap-sm">
+                    <div className="flex items-start justify-between gap-sm">
+                      <div className="flex min-w-0 flex-col">
+                        <span className="font-semibold">
+                          {props.get(r.property_id)?.title ?? "—"}
+                        </span>
+                        <span className="text-sm text-ink-secondary">
+                          {owners.get(r.owner_id)?.name ?? "—"}{" "}
+                          <span dir="ltr">{owners.get(r.owner_id)?.phone}</span>
+                        </span>
+                      </div>
+                      <Pill tone={r.requests_in_window === 0 ? "warn" : "success"}>
+                        {t.requests}: {r.requests_in_window}
+                      </Pill>
+                    </div>
+                    <p className="text-xs text-ink-secondary">
+                      {t.window}: {date(locale, r.starts_at)} → {date(locale, r.window_ends_at)}
+                    </p>
+                    {r.status === "eligible" && (
+                      <GrantGuarantee subscriptionId={r.subscription_id} />
+                    )}
+                  </div>
+                </Card>
               ))}
-            </ul>
+            </div>
           )}
-        </section>
+        </Section>
       ))}
-    </div>
+    </>
   );
 }

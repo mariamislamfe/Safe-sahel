@@ -2,83 +2,111 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { rpcErrorCode } from "@safe-sahel/utils";
 import { createClient } from "@/lib/supabase/client";
+import { useLocale } from "@/lib/i18n/locale-provider";
+import { adminShellDict } from "@/lib/i18n/admin-shell";
+import { errorText } from "@/lib/i18n/common";
+import { btn } from "@/components/admin-actions";
 
 type Amenity = { id: string; name: string; category: string | null };
 
+const input =
+  "min-w-0 flex-1 rounded-lg border border-border bg-surface px-md py-2 text-sm outline-none focus:border-turquoise";
+
 export function AdminAmenitiesManager({ initialAmenities }: { initialAmenities: Amenity[] }) {
   const router = useRouter();
-  const [amenities, setAmenities] = useState(initialAmenities);
+  const locale = useLocale();
+  const t = adminShellDict[locale].catalog;
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function add() {
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
     if (!name.trim()) return;
-    const supabase = createClient();
-    const { data, error } = await supabase
+    setBusy(true);
+    setError(null);
+    const { error: err } = await createClient()
       .from("amenities")
-      .insert({ name: name.trim(), category: category.trim() || null })
-      .select("id, name, category")
-      .single();
-    if (!error && data) {
-      setAmenities((prev) => [...prev, data]);
-      setName("");
-      setCategory("");
-      router.refresh();
-    }
+      .insert({ name: name.trim(), category: category.trim() || null });
+    setBusy(false);
+    if (err) return setError(errorText(locale, rpcErrorCode(err.message)));
+    setName("");
+    setCategory("");
+    router.refresh();
   }
 
   async function remove(id: string) {
-    const supabase = createClient();
-    await supabase.from("amenities").delete().eq("id", id);
-    setAmenities((prev) => prev.filter((a) => a.id !== id));
+    setBusy(true);
+    setError(null);
+    const { error: err } = await createClient().from("amenities").delete().eq("id", id);
+    setBusy(false);
+    if (err) return setError(errorText(locale, rpcErrorCode(err.message)));
     router.refresh();
+  }
+
+  const groups = new Map<string, Amenity[]>();
+  for (const a of initialAmenities) {
+    const key = a.category ?? "—";
+    groups.set(key, [...(groups.get(key) ?? []), a]);
   }
 
   return (
     <div className="flex flex-col gap-md">
-      <div className="flex flex-wrap gap-sm">
+      <form
+        onSubmit={add}
+        className="flex flex-col gap-sm rounded-2xl border border-border bg-surface p-md sm:flex-row"
+      >
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Amenity name"
-          className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+          placeholder={t.name}
+          className={input}
         />
         <input
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          placeholder="Category (optional)"
-          className="rounded-sm border border-border bg-surface px-md py-sm text-sm outline-none focus:border-turquoise"
+          placeholder={t.category}
+          className={input}
         />
-        <button
-          onClick={add}
-          className="rounded-md border border-turquoise px-md py-sm text-sm font-medium text-turquoise-dark hover:bg-turquoise-light"
-        >
-          Add amenity
+        <button disabled={busy || !name.trim()} className={btn.primary}>
+          + {t.add}
         </button>
-      </div>
+      </form>
+      {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <ul className="flex flex-col gap-xs">
-        {amenities.map((amenity) => (
-          <li
-            key={amenity.id}
-            className="flex items-center justify-between rounded-md border border-border px-md py-sm text-sm"
-          >
-            <span>
-              {amenity.name}
-              {amenity.category && (
-                <span className="text-ink-secondary"> · {amenity.category}</span>
-              )}
-            </span>
-            <button
-              onClick={() => remove(amenity.id)}
-              className="text-xs text-red-600 hover:underline"
-            >
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
+      {initialAmenities.length === 0 ? (
+        <p className="text-sm text-ink-secondary">{t.empty}</p>
+      ) : (
+        [...groups.entries()].map(([category, items]) => (
+          <div key={category} className="flex flex-col gap-xs">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-secondary">
+              {category}
+            </p>
+            <div className="flex flex-wrap gap-xs">
+              {items.map((a) => (
+                <span
+                  key={a.id}
+                  className="group inline-flex items-center gap-xs rounded-full border border-border bg-surface py-1 pe-1 ps-md text-sm"
+                >
+                  {a.name}
+                  <button
+                    disabled={busy}
+                    onClick={() => remove(a.id)}
+                    aria-label={t.remove}
+                    title={t.remove}
+                    className="grid size-6 place-items-center rounded-full text-ink-secondary hover:bg-red-50 hover:text-red-600"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }

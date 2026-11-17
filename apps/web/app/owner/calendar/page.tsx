@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { ownerDict } from "@/lib/i18n/owner";
 import { getOwnerListings } from "@/lib/queries/owner-dashboard";
 import { OwnerCalendar, type CalendarBlock } from "@/components/owner-calendar";
+import { ChipRow, EmptyState, PageHeader } from "@/components/admin/ui";
 
 function parseRange(raw: string) {
   const m = raw.match(/(\d{4}-\d{2}-\d{2}).*?(\d{4}-\d{2}-\d{2})/);
@@ -56,32 +56,21 @@ export default async function OwnerCalendarPage(props: PageProps<"/owner/calenda
   }
 
   return (
-    <div className="flex flex-col gap-lg">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">{t.intro}</p>
-      </div>
+    <>
+      <PageHeader title={t.title} description={t.intro} />
 
       {listings.length === 0 ? (
-        <p className="text-sm text-ink-secondary">{t.noListings}</p>
+        <EmptyState icon="calendar" title={t.noListings} />
       ) : (
         <>
           {listings.length > 1 && (
-            <div className="-mx-lg flex gap-sm overflow-x-auto px-lg">
-              {listings.map((l) => (
-                <Link
-                  key={l.id}
-                  href={`/owner/calendar?p=${l.id}`}
-                  className={`shrink-0 rounded-full border px-md py-xs text-sm ${
-                    l.id === selectedId
-                      ? "border-turquoise bg-turquoise-light text-turquoise-dark"
-                      : "border-border text-ink-secondary"
-                  }`}
-                >
-                  {l.title}
-                </Link>
-              ))}
-            </div>
+            <ChipRow
+              items={listings.map((l) => ({
+                href: `/owner/calendar?p=${l.id}`,
+                label: l.title,
+                active: l.id === selectedId,
+              }))}
+            />
           )}
           {selected && (
             <OwnerCalendar
@@ -93,6 +82,6 @@ export default async function OwnerCalendarPage(props: PageProps<"/owner/calenda
           )}
         </>
       )}
-    </div>
+    </>
   );
 }

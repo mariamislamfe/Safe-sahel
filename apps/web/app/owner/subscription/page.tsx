@@ -16,13 +16,14 @@ import {
   type InstapayInfo,
 } from "@/components/subscription-checkout";
 import { DocumentViewButton } from "@/components/document-view-button";
+import { Card, PageHeader, Pill, type PillTone } from "@/components/admin/ui";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="flex flex-col gap-md rounded-2xl border border-border p-lg">
+    <Card className="flex flex-col gap-md">
       <h2 className="font-display text-lg font-semibold">{title}</h2>
       {children}
-    </section>
+    </Card>
   );
 }
 
@@ -111,12 +112,12 @@ export default async function OwnerSubscriptionPage() {
     expired: t.statusExpired,
     none: t.statusNone,
   };
-  const statusStyle: Record<string, string> = {
-    free: "bg-turquoise-light text-turquoise-dark",
-    active: "bg-turquoise-light text-turquoise-dark",
-    grace: "bg-butter-soft text-ink",
-    expired: "bg-red-50 text-red-700",
-    none: "bg-surface-soft text-ink-secondary",
+  const statusTone: Record<string, PillTone> = {
+    free: "success",
+    active: "success",
+    grace: "warn",
+    expired: "danger",
+    none: "neutral",
   };
 
   const featuredUntil = new Map<string, string>();
@@ -147,15 +148,15 @@ export default async function OwnerSubscriptionPage() {
   );
 
   return (
-    <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">{t.title}</h1>
+    <div className="flex max-w-4xl flex-col gap-lg">
+      <PageHeader title={t.title} />
 
       {freeActive && (
-        <div className="rounded-2xl bg-gradient-to-r from-turquoise to-turquoise-dark px-lg py-md font-medium text-white">
+        <div className="rounded-2xl bg-gradient-to-r from-turquoise to-turquoise-dark px-lg py-md font-medium text-white shadow-sm">
           🎁 {t.freeBanner(date(locale, freeUntil))}
         </div>
       )}
-      <div className="flex flex-col gap-xs rounded-2xl border border-border px-lg py-md text-sm">
+      <div className="flex flex-col gap-xs rounded-2xl border border-border bg-surface px-lg py-md text-sm">
         <p className={profile.founding ? "font-semibold text-ink" : "text-ink-secondary"}>
           {profile.founding ? `⭐ ${t.founderYes}` : t.founderNo}
         </p>
@@ -195,11 +196,7 @@ export default async function OwnerSubscriptionPage() {
                     {sub ? date(locale, sub.ends_at) : freeActive ? date(locale, freeUntil) : "—"}
                   </td>
                   <td className="py-sm">
-                    <span
-                      className={`rounded-full px-sm py-0.5 text-xs font-medium ${statusStyle[status]}`}
-                    >
-                      {statusText[status]}
-                    </span>
+                    <Pill tone={statusTone[status]}>{statusText[status]}</Pill>
                   </td>
                 </tr>
               ))}
@@ -223,7 +220,7 @@ export default async function OwnerSubscriptionPage() {
         ) : (
           <ul className="flex flex-col gap-xs text-sm">
             {(guarantee ?? []).map((g) => (
-              <li key={g.subscription_id} className="rounded-lg border border-border px-md py-sm">
+              <li key={g.subscription_id} className="rounded-xl bg-surface-soft px-md py-sm">
                 <span className="font-medium">{titleById.get(g.property_id) ?? "—"}: </span>
                 {g.status === "tracking"
                   ? t.guaranteeStatus.tracking(g.requests_in_window, date(locale, g.window_ends_at))
@@ -290,7 +287,17 @@ export default async function OwnerSubscriptionPage() {
                       className="text-sm"
                     />
                   )}
-                  <span className="text-xs font-medium">{t.paymentStatus[p.status]}</span>
+                  <Pill
+                    tone={
+                      p.status === "approved"
+                        ? "success"
+                        : p.status === "rejected"
+                          ? "danger"
+                          : "warn"
+                    }
+                  >
+                    {t.paymentStatus[p.status]}
+                  </Pill>
                 </span>
               </li>
             ))}

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getOwnerPropertyById, getPropertyInventory } from "@/lib/queries/owner";
+import { PageHeader } from "@/components/admin/ui";
 import { PropertyInventoryManager } from "@/components/property-inventory-manager";
 
 export default async function PropertyInventoryPage(
@@ -20,7 +21,7 @@ export default async function PropertyInventoryPage(
 
   return (
     <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">Inventory — {property.title}</h1>
+      <PageHeader title={property.title} />
       <PropertyInventoryManager
         ownerId={user.id}
         propertyId={property.id}

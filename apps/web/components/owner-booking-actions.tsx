@@ -7,22 +7,39 @@ import { createClient } from "@/lib/supabase/client";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { ownerDict } from "@/lib/i18n/owner";
 import { errorText } from "@/lib/i18n/common";
+import { useFeedback } from "@/components/feedback";
+import { dashboardDict } from "@/lib/i18n/dashboard";
 
 /** Confirm / decline a pending request via respond_to_booking(). */
 export function OwnerRespondButtons({ bookingId }: { bookingId: string }) {
   const router = useRouter();
   const locale = useLocale();
   const t = ownerDict[locale].bookings;
+  const f = dashboardDict[locale].toasts;
+  const fb = useFeedback();
   const [busy, setBusy] = useState<"confirm" | "decline" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function respond(decision: "confirm" | "decline") {
     let note: string | null = null;
-    if (decision === "confirm" && !confirm(t.confirmPrompt)) return;
+    if (
+      decision === "confirm" &&
+      !(await fb.confirm({
+        title: f.confirmTitle,
+        body: t.confirmPrompt,
+        confirmLabel: f.confirmCta,
+      }))
+    )
+      return;
     if (decision === "decline") {
-      const answer = prompt(t.declineReason);
+      const answer = await fb.prompt({
+        title: f.declineTitle,
+        tone: "danger",
+        confirmLabel: f.declineConfirm,
+        input: { label: t.declineReason, multiline: true },
+      });
       if (answer === null) return;
-      note = answer;
+      note = answer.trim() || null;
     }
     setBusy(decision);
     setError(null);
@@ -34,6 +51,7 @@ export function OwnerRespondButtons({ bookingId }: { bookingId: string }) {
     setBusy(null);
     if (e) return setError(errorText(locale, rpcErrorCode(e.message)));
     if (data === "expired") setError(errorText(locale, "booking_expired"));
+    else fb.toast(decision === "confirm" ? f.bookingConfirmed : f.bookingDeclined);
     router.refresh();
   }
 
@@ -43,14 +61,14 @@ export function OwnerRespondButtons({ bookingId }: { bookingId: string }) {
         <button
           onClick={() => respond("decline")}
           disabled={busy !== null}
-          className="flex-1 rounded-md border border-border px-lg py-sm text-sm font-medium text-ink-secondary hover:border-red-300 hover:text-red-600 disabled:opacity-60 sm:flex-none"
+          className="flex-1 rounded-xl border border-border px-lg py-2.5 text-sm font-medium text-ink-secondary hover:border-red-300 hover:text-red-600 disabled:opacity-60 sm:flex-none"
         >
           {t.decline}
         </button>
         <button
           onClick={() => respond("confirm")}
           disabled={busy !== null}
-          className="flex-1 rounded-md bg-turquoise px-lg py-sm text-sm font-semibold text-white hover:bg-turquoise-dark disabled:opacity-60 sm:flex-none"
+          className="flex-1 rounded-xl bg-turquoise px-lg py-2.5 text-sm font-semibold text-white hover:bg-turquoise-dark disabled:opacity-60 sm:flex-none"
         >
           {busy === "confirm" ? t.confirming : t.confirm}
         </button>
@@ -65,12 +83,23 @@ export function OwnerCancelBooking({ bookingId }: { bookingId: string }) {
   const router = useRouter();
   const locale = useLocale();
   const t = ownerDict[locale].bookingDetail;
+  const f = dashboardDict[locale].toasts;
+  const fb = useFeedback();
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function cancel() {
-    if (!confirm(t.cancelConfirm)) return;
+    if (
+      !(await fb.confirm({
+        title: f.cancelTitle,
+        body: t.cancelConfirm,
+        tone: "danger",
+        confirmLabel: f.cancelCta,
+        cancelLabel: f.keep,
+      }))
+    )
+      return;
     setBusy(true);
     const { error: e } = await createClient().rpc("cancel_booking", {
       p_booking_id: bookingId,
@@ -78,6 +107,7 @@ export function OwnerCancelBooking({ bookingId }: { bookingId: string }) {
     });
     setBusy(false);
     if (e) return setError(errorText(locale, rpcErrorCode(e.message)));
+    fb.toast(f.bookingCancelled);
     router.refresh();
   }
 

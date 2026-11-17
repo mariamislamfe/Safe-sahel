@@ -1,11 +1,12 @@
-import Link from "next/link";
 import { percentChange } from "@safe-sahel/utils";
 import type { WeeklyKpiRow } from "@safe-sahel/types";
 import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { adminDict } from "@/lib/i18n/admin";
 import { date } from "@/lib/i18n/format";
+import { requireSection } from "@/lib/admin-access";
 import { compoundList } from "@/lib/queries/admin";
+import { ChipRow, PageHeader, Table, Td, Th, Tr } from "@/components/admin/ui";
 
 type Metric = keyof Omit<WeeklyKpiRow, "week_start">;
 
@@ -22,6 +23,7 @@ function Change({ cur, prev }: { cur: number; prev: number }) {
 }
 
 export default async function AdminKpisPage(props: PageProps<"/admin/kpis">) {
+  await requireSection("kpis");
   const params = await props.searchParams;
   const compoundId = typeof params.c === "string" ? params.c : "";
   const supabase = await createClient();
@@ -44,40 +46,33 @@ export default async function AdminKpisPage(props: PageProps<"/admin/kpis">) {
   const shown = weeks.slice(1).reverse(); // newest first; first row only feeds WoW
 
   return (
-    <div className="flex flex-col gap-lg">
-      <div className="flex flex-col gap-xs">
-        <h1 className="font-display text-2xl font-bold">{t.title}</h1>
-        <p className="text-sm text-ink-secondary">{t.body}</p>
-      </div>
-      <div className="-mx-lg flex gap-xs overflow-x-auto px-lg">
-        <Link
-          href="/admin/kpis"
-          className={`shrink-0 rounded-full border px-md py-xs text-xs ${!compoundId ? "border-turquoise bg-turquoise-light" : "border-border"}`}
-        >
-          {adminDict[locale].subscriptions.allCompounds}
-        </Link>
-        {compounds.map((c) => (
-          <Link
-            key={c.id}
-            href={`/admin/kpis?c=${c.id}`}
-            className={`shrink-0 rounded-full border px-md py-xs text-xs ${compoundId === c.id ? "border-turquoise bg-turquoise-light" : "border-border"}`}
-          >
-            {c.is_focus && "★ "}
-            {locale === "ar" && c.name_ar ? c.name_ar : c.name}
-          </Link>
-        ))}
-      </div>
+    <>
+      <PageHeader title={t.title} description={t.body} />
+      <ChipRow
+        items={[
+          {
+            href: "/admin/kpis",
+            label: adminDict[locale].subscriptions.allCompounds,
+            active: !compoundId,
+          },
+          ...compounds.map((c) => ({
+            href: `/admin/kpis?c=${c.id}`,
+            label: `${c.is_focus ? "★ " : ""}${locale === "ar" && c.name_ar ? c.name_ar : c.name}`,
+            active: compoundId === c.id,
+          })),
+        ]}
+      />
       {error && <p className="text-sm text-red-600">{error.message}</p>}
 
       {latest && (
-        <div className="grid grid-cols-2 gap-sm sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-sm sm:grid-cols-3 lg:grid-cols-5">
           {metrics.map((m) => (
             <div
               key={m.key}
-              className="flex flex-col gap-0.5 rounded-2xl border border-border p-md"
+              className="flex flex-col gap-xs rounded-2xl border border-border bg-surface p-lg shadow-[0_1px_2px_rgba(16,24,40,0.04)]"
             >
+              <span className="text-sm text-ink-secondary">{m.label}</span>
               <span className="font-display text-3xl font-bold tabular-nums">{latest[m.key]}</span>
-              <span className="text-xs text-ink-secondary">{m.label}</span>
               {previous && (
                 <span className="flex items-center gap-xs">
                   <Change cur={latest[m.key]} prev={previous[m.key]} />
@@ -89,36 +84,34 @@ export default async function AdminKpisPage(props: PageProps<"/admin/kpis">) {
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-2xl border border-border">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-surface-soft text-ink-secondary">
-            <tr>
-              <th className="p-md text-start font-medium">{t.week}</th>
-              {metrics.map((m) => (
-                <th key={m.key} className="p-md text-end font-medium">
-                  {m.label}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((w) => {
-              const idx = weeks.indexOf(w);
-              const prev = weeks[idx - 1];
-              return (
-                <tr key={w.week_start} className="border-t border-border">
-                  <td className="whitespace-nowrap p-md">{date(locale, w.week_start)}</td>
-                  {metrics.map((m) => (
-                    <td key={m.key} className="p-md text-end tabular-nums">
-                      {w[m.key]} {prev && <Change cur={w[m.key]} prev={prev[m.key]} />}
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <Table minWidth={760}>
+        <thead>
+          <tr>
+            <Th>{t.week}</Th>
+            {metrics.map((m) => (
+              <Th key={m.key} end>
+                {m.label}
+              </Th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {shown.map((w) => {
+            const idx = weeks.indexOf(w);
+            const prev = weeks[idx - 1];
+            return (
+              <Tr key={w.week_start}>
+                <Td className="whitespace-nowrap font-medium">{date(locale, w.week_start)}</Td>
+                {metrics.map((m) => (
+                  <Td key={m.key} end className="tabular-nums">
+                    {w[m.key]} {prev && <Change cur={w[m.key]} prev={prev[m.key]} />}
+                  </Td>
+                ))}
+              </Tr>
+            );
+          })}
+        </tbody>
+      </Table>
+    </>
   );
 }

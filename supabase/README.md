@@ -109,7 +109,15 @@ running them in order once is enough; there's no down-migration story yet.
   listings unpublished, "مراسي" merged into Marassi). Every data change is
   recorded in `data_migration_log`.
 
-**Reverting 0018:** run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
+- `0019_staff_roles.sql` — team roles for the admin dashboard. The founder
+  (`role = 'admin'`) keeps full access; team members get a job title and a
+  set of sections (`verification`, `listings`, `bookings`, `payments`,
+  `reports`, `users`, `catalog`, `security`), enforced by RLS and the admin
+  RPCs. Settings/prices, team management and guest ID documents stay
+  founder-only. Manage it from **Admin → Team & roles**. Requires 0018.
+  Revert with [`down/0019_staff_roles.down.sql`](./migrations/down/0019_staff_roles.down.sql).
+
+**Reverting 0018:** (revert 0019 first) run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
 It restores the moved/unpublished rows from `data_migration_log` and drops
 everything 0018 added (export new tables first if you want to keep them).
 

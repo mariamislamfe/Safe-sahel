@@ -1,26 +1,34 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getLocale } from "@/lib/locale";
+import { dashboardDict } from "@/lib/i18n/dashboard";
 import {
   getHostRatingSummary,
   getGuestRatingSummary,
   getMyVerificationRequest,
 } from "@/lib/queries/profile";
 import { ProfileEditor } from "@/components/profile-editor";
+import { ActionRow, Card, PageHeader, Pill } from "@/components/admin/ui";
+import { Icon } from "@/components/admin/icons";
 
-const verificationStatusCopy: Record<string, string> = {
-  pending: "Your verification request is in — we'll be in touch soon to complete the process.",
-  contacted: "We've reached out to you to complete verification.",
-  approved: "You're verified.",
-  rejected: "Your last verification request wasn't approved. You can submit a new one.",
-};
+function Stars({ n }: { n: number }) {
+  return (
+    <span className="text-sm tracking-tight text-amber-500" aria-label={`${n}/5`}>
+      {"★".repeat(n)}
+      <span className="text-border">{"★".repeat(Math.max(0, 5 - n))}</span>
+    </span>
+  );
+}
 
 export default async function ProfilePage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?redirect=/profile");
+
+  const t = dashboardDict[await getLocale()].profile;
 
   const { data: profileRow } = await supabase
     .from("profiles")
@@ -37,121 +45,132 @@ export default async function ProfilePage() {
     phone: profileRow?.phone ?? null,
     role: profileRow?.role ?? "guest",
     verified: profileRow?.verified ?? false,
+    canAccessAdmin: profileRow?.role === "admin",
   };
+  const isHost = profile.role === "owner" || profile.role === "admin";
 
   const [hostRating, guestRating, verificationRequest] = await Promise.all([
-    profile.role === "owner" || profile.role === "admin"
-      ? getHostRatingSummary(user.id)
-      : Promise.resolve(null),
+    isHost ? getHostRatingSummary(user.id) : Promise.resolve(null),
     getGuestRatingSummary(user.id),
-    getMyVerificationRequest(user.id),
+    isHost ? getMyVerificationRequest(user.id) : Promise.resolve(null),
   ]);
 
+  const ratings = [
+    hostRating && hostRating.reviewCount > 0
+      ? {
+          title: t.hostRating,
+          avg: hostRating.averageRating,
+          count: hostRating.reviewCount,
+          items: hostRating.recentReviews.map((r) => ({
+            name: r.guestName ?? t.guest,
+            stars: r.ratingOverall,
+            comment: r.comment,
+          })),
+        }
+      : null,
+    guestRating.reviewCount > 0
+      ? {
+          title: t.guestRating,
+          avg: guestRating.averageRating,
+          count: guestRating.reviewCount,
+          items: guestRating.recentReviews.map((r) => ({
+            name: r.ownerName ?? t.host,
+            stars: r.rating,
+            comment: r.comment,
+          })),
+        }
+      : null,
+  ].filter((r) => r !== null);
+
   return (
-    <main className="mx-auto flex max-w-2xl flex-col gap-2xl px-lg py-2xl">
-      <div className="flex flex-wrap items-center gap-sm">
-        <h1 className="font-display text-2xl font-bold tracking-tight">Profile</h1>
-        <span className="rounded-full bg-surface-soft px-md py-xs text-xs font-semibold capitalize text-ink-secondary">
-          {profile.role === "admin" ? "Admin" : profile.role === "owner" ? "Host" : "Guest"}
-        </span>
-        {profile.verified && (
-          <span className="flex items-center gap-1 rounded-full bg-butter px-md py-xs text-xs font-semibold text-ink">
-            ✓ Verified
-          </span>
-        )}
-      </div>
+    <>
+      <PageHeader
+        title={t.title}
+        actions={
+          <div className="flex items-center gap-xs">
+            <Pill tone="neutral">{t.roles[profile.role] ?? profile.role}</Pill>
+            {profile.verified && (
+              <Pill tone="success">
+                <Icon name="check" className="size-3.5" strokeWidth={2.6} />
+                {t.verified}
+              </Pill>
+            )}
+          </div>
+        }
+      />
 
-      <ProfileEditor profile={profile} />
+      <div className="grid grid-cols-1 gap-lg lg:grid-cols-[1fr_320px]">
+        <Card className="flex flex-col gap-lg">
+          <div className="flex flex-col gap-0.5">
+            <h2 className="font-display text-lg font-semibold">{t.details}</h2>
+            <p className="text-sm text-ink-secondary">{t.detailsBody}</p>
+          </div>
+          <ProfileEditor profile={profile} />
+        </Card>
 
-      {/* Verification */}
-      <div className="flex flex-col gap-sm rounded-xl border border-border p-lg">
-        <h2 className="font-display text-base font-semibold">Verification</h2>
-        {profile.verified ? (
-          <p className="text-sm text-ink-secondary">
-            Your account is verified — a badge shows next to your name and your listings get
-            priority in search.
-          </p>
-        ) : verificationRequest ? (
-          <p className="text-sm text-ink-secondary">
-            {verificationStatusCopy[verificationRequest.status]}
-          </p>
-        ) : (
-          <>
-            <p className="text-sm text-ink-secondary">
-              Get a verified badge next to your name and priority placement for your listings.
-            </p>
-            <Link
-              href="/profile/verify"
-              className="w-fit rounded-md border border-turquoise px-lg py-sm text-sm font-medium text-turquoise-dark hover:bg-turquoise-light"
-            >
-              Request verification
-            </Link>
-          </>
-        )}
-        {verificationRequest?.status === "rejected" && (
-          <Link
-            href="/profile/verify"
-            className="w-fit text-sm font-medium text-turquoise-dark hover:underline"
-          >
-            Submit a new request
-          </Link>
-        )}
-      </div>
-
-      {/* Host rating */}
-      {hostRating && hostRating.reviewCount > 0 && (
-        <div className="flex flex-col gap-md rounded-xl border border-border p-lg">
-          <h2 className="font-display text-base font-semibold">
-            <span className="text-butter">★</span> {hostRating.averageRating?.toFixed(1)} hosting
-            rating · {hostRating.reviewCount} review{hostRating.reviewCount === 1 ? "" : "s"}
+        <div className="flex flex-col gap-md">
+          <h2 className="font-display text-sm font-semibold uppercase tracking-wider text-ink-secondary">
+            {t.shortcuts}
           </h2>
-          <div className="flex flex-col gap-sm">
-            {hostRating.recentReviews.map((review, i) => (
-              <div key={i} className="rounded-lg bg-surface-soft p-md text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-ink">{review.guestName ?? "Guest"}</span>
-                  <span className="text-butter">{"★".repeat(review.ratingOverall)}</span>
+          <ActionRow href="/account/bookings" icon="calendar" label={t.myTrips} />
+          {isHost ? (
+            <>
+              <ActionRow href="/owner" icon="home" label={t.hostDashboard} />
+              <ActionRow href="/owner/bookings" icon="users" label={t.myGuests} />
+            </>
+          ) : (
+            <ActionRow href="/owner" icon="plus" label={t.becomeHost} />
+          )}
+
+          {isHost && (
+            <Card tone={profile.verified ? "default" : "warn"} className="flex flex-col gap-sm">
+              <h3 className="flex items-center gap-sm font-display font-semibold">
+                <Icon name="shield" className="size-5 text-turquoise-dark" />
+                {t.verification}
+              </h3>
+              <p className="text-sm text-ink-secondary">
+                {profile.verified
+                  ? t.verifiedBody
+                  : verificationRequest
+                    ? t.verificationStatus[verificationRequest.status]
+                    : t.verifyBody}
+              </p>
+              {!profile.verified &&
+                (!verificationRequest || verificationRequest.status === "rejected") && (
+                  <Link
+                    href="/owner/verification"
+                    className="w-fit rounded-lg bg-turquoise px-md py-1.5 text-sm font-semibold text-white hover:bg-turquoise-dark"
+                  >
+                    {verificationRequest ? t.resubmit : t.verifyCta}
+                  </Link>
+                )}
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {ratings.map((r) => (
+        <Card key={r.title} className="flex flex-col gap-md">
+          <h2 className="flex flex-wrap items-center gap-sm font-display text-lg font-semibold">
+            <span className="text-amber-500">★</span>
+            {r.avg?.toFixed(1)}
+            <span className="text-ink-secondary">·</span>
+            {r.title}
+            <span className="text-sm font-normal text-ink-secondary">{t.reviews(r.count)}</span>
+          </h2>
+          <div className="grid grid-cols-1 gap-sm md:grid-cols-2">
+            {r.items.map((review, i) => (
+              <div key={i} className="flex flex-col gap-xs rounded-xl bg-surface-soft p-md text-sm">
+                <div className="flex items-center justify-between gap-sm">
+                  <span className="font-medium">{review.name}</span>
+                  <Stars n={review.stars} />
                 </div>
-                {review.comment && <p className="mt-1 text-ink-secondary">{review.comment}</p>}
+                {review.comment && <p className="text-ink-secondary">{review.comment}</p>}
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Guest rating */}
-      {guestRating.reviewCount > 0 && (
-        <div className="flex flex-col gap-md rounded-xl border border-border p-lg">
-          <h2 className="font-display text-base font-semibold">
-            <span className="text-butter">★</span> {guestRating.averageRating?.toFixed(1)} guest
-            rating · {guestRating.reviewCount} review{guestRating.reviewCount === 1 ? "" : "s"}
-          </h2>
-          <div className="flex flex-col gap-sm">
-            {guestRating.recentReviews.map((review, i) => (
-              <div key={i} className="rounded-lg bg-surface-soft p-md text-sm">
-                <div className="flex items-center justify-between">
-                  <span className="font-medium text-ink">{review.ownerName ?? "Host"}</span>
-                  <span className="text-butter">{"★".repeat(review.rating)}</span>
-                </div>
-                {review.comment && <p className="mt-1 text-ink-secondary">{review.comment}</p>}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* History */}
-      <div className="flex flex-col gap-sm rounded-xl border border-border p-lg">
-        <h2 className="font-display text-base font-semibold">History</h2>
-        <Link href="/account/bookings" className="text-sm text-turquoise-dark hover:underline">
-          Places I&apos;ve booked →
-        </Link>
-        {(profile.role === "owner" || profile.role === "admin") && (
-          <Link href="/owner/bookings" className="text-sm text-turquoise-dark hover:underline">
-            Guests who&apos;ve booked with me →
-          </Link>
-        )}
-      </div>
-    </main>
+        </Card>
+      ))}
+    </>
   );
 }

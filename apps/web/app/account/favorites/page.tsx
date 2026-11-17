@@ -1,16 +1,20 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getLocale } from "@/lib/locale";
+import { dashboardDict } from "@/lib/i18n/dashboard";
 import { getPropertiesByIds } from "@/lib/queries/properties";
 import { PropertyCard, fromRealProperty } from "@/components/property-card";
+import { EmptyState, PageHeader } from "@/components/admin/ui";
 
 export default async function FavoritesPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  if (!user) redirect("/login?redirect=/account/favorites");
 
+  const t = dashboardDict[await getLocale()].account.favorites;
   const { data: favorites } = await supabase
     .from("favorites")
     .select("property_id")
@@ -18,23 +22,17 @@ export default async function FavoritesPage() {
   const properties = await getPropertiesByIds((favorites ?? []).map((f) => f.property_id));
 
   return (
-    <main className="mx-auto flex max-w-6xl flex-col gap-xl px-lg py-2xl">
-      <h1 className="font-display text-2xl font-bold tracking-tight">Favorites</h1>
+    <>
+      <PageHeader title={t.title} count={properties.length || undefined} />
 
       {properties.length === 0 ? (
-        <div className="flex flex-col items-center gap-md rounded-2xl border border-dashed border-border px-lg py-5xl text-center">
-          <div className="flex size-14 items-center justify-center rounded-full bg-surface-soft text-2xl text-ink-secondary">
-            ♡
-          </div>
-          <p className="font-display text-lg font-semibold text-ink">No favorites yet</p>
-          <p className="max-w-sm text-sm text-ink-secondary">
-            Tap the heart on any property to save it here for later.
-          </p>
+        <div className="flex flex-col items-center gap-md">
+          <EmptyState icon="heart" title={t.empty} body={t.emptyBody} />
           <Link
             href="/search"
-            className="mt-sm rounded-full bg-turquoise px-xl py-sm text-sm font-semibold text-white hover:bg-turquoise-dark"
+            className="rounded-xl bg-turquoise px-xl py-sm text-sm font-semibold text-white hover:bg-turquoise-dark"
           >
-            Browse stays
+            {t.browse}
           </Link>
         </div>
       ) : (
@@ -44,6 +42,6 @@ export default async function FavoritesPage() {
           ))}
         </div>
       )}
-    </main>
+    </>
   );
 }

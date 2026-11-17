@@ -1,7 +1,7 @@
-import Link from "next/link";
 import { getLocale } from "@/lib/locale";
 import { ownerDict } from "@/lib/i18n/owner";
 import { createClient } from "@/lib/supabase/server";
+import { EditorTabs } from "@/components/editor-tabs";
 
 export default async function PropertyOwnerLayout(props: LayoutProps<"/owner/properties/[id]">) {
   const { id } = await props.params;
@@ -25,17 +25,7 @@ export default async function PropertyOwnerLayout(props: LayoutProps<"/owner/pro
 
   return (
     <div className="flex flex-col gap-lg">
-      <nav className="-mx-lg flex gap-sm overflow-x-auto px-lg">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            className="shrink-0 rounded-md border border-border px-md py-xs text-sm font-medium text-ink-secondary hover:border-turquoise hover:text-turquoise-dark"
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <EditorTabs tabs={tabs} />
       {props.children}
     </div>
   );

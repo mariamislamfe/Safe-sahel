@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/client";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { ownerDict } from "@/lib/i18n/owner";
 import { blockerTexts, errorText } from "@/lib/i18n/common";
+import { useFeedback } from "@/components/feedback";
+import { dashboardDict } from "@/lib/i18n/dashboard";
 
 /** Publish / unpublish / archive (soft delete). The DB enforces the publish rules. */
 export function OwnerListingActions({
@@ -21,6 +23,8 @@ export function OwnerListingActions({
   const router = useRouter();
   const locale = useLocale();
   const t = ownerDict[locale].listings;
+  const f = dashboardDict[locale].toasts;
+  const fb = useFeedback();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -38,10 +42,24 @@ export function OwnerListingActions({
       );
       return;
     }
+    fb.toast(
+      patch.deleted_at ? f.archived : patch.status === "published" ? f.published : f.unpublished,
+    );
     router.refresh();
   }
 
-  const btn = "rounded-md px-md py-xs text-sm font-medium disabled:opacity-60";
+  async function archive() {
+    const ok = await fb.confirm({
+      title: f.archiveTitle,
+      body: t.archiveConfirm,
+      tone: "danger",
+      confirmLabel: f.archiveCta,
+      cancelLabel: f.keep,
+    });
+    if (ok) await update({ deleted_at: new Date().toISOString(), status: "draft" });
+  }
+
+  const btn = "rounded-lg px-md py-1.5 text-sm font-medium disabled:opacity-60";
   return (
     <div className="flex flex-col gap-xs">
       <div className="flex flex-wrap gap-xs">
@@ -63,10 +81,7 @@ export function OwnerListingActions({
           </button>
         ) : null}
         <button
-          onClick={() =>
-            confirm(t.archiveConfirm) &&
-            update({ deleted_at: new Date().toISOString(), status: "draft" })
-          }
+          onClick={archive}
           disabled={busy}
           className={`${btn} text-ink-secondary hover:text-red-600`}
         >

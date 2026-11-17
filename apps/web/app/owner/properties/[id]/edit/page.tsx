@@ -7,6 +7,7 @@ import {
   getPropertyAmenityIds,
 } from "@/lib/queries/owner";
 import { PropertyForm } from "@/components/property-form";
+import { PageHeader } from "@/components/admin/ui";
 
 export default async function EditPropertyPage(props: PageProps<"/owner/properties/[id]/edit">) {
   const { id } = await props.params;
@@ -27,8 +28,8 @@ export default async function EditPropertyPage(props: PageProps<"/owner/properti
   const amenityIds = await getPropertyAmenityIds(property.id);
 
   return (
-    <div className="flex flex-col gap-lg">
-      <h1 className="font-display text-2xl font-bold">{property.title}</h1>
+    <div className="flex max-w-3xl flex-col gap-lg">
+      <PageHeader title={property.title} />
       <PropertyForm
         ownerId={user.id}
         compounds={compounds}

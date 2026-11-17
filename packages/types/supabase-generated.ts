@@ -669,6 +669,56 @@ type ListingDuplicateFlagsRow = {
   updated_at: string;
 };
 
+/** Admin dashboard sections a team member can be given (0019). */
+export type AdminPermission =
+  | "verification"
+  | "listings"
+  | "bookings"
+  | "payments"
+  | "reports"
+  | "users"
+  | "catalog"
+  | "security";
+
+export const ADMIN_PERMISSIONS: AdminPermission[] = [
+  "verification",
+  "listings",
+  "bookings",
+  "payments",
+  "reports",
+  "users",
+  "catalog",
+  "security",
+];
+
+type StaffMembersRow = {
+  profile_id: string;
+  title: string;
+  permissions: AdminPermission[];
+  active: boolean;
+  added_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deactivated_at: string | null;
+};
+
+export type AdminAccess = {
+  founder: boolean;
+  title: string | null;
+  permissions: AdminPermission[];
+};
+
+export type StaffListRow = {
+  profile_id: string;
+  email: string | null;
+  full_name: string | null;
+  title: string;
+  permissions: AdminPermission[];
+  active: boolean;
+  created_at: string;
+  deactivated_at: string | null;
+};
+
 type DataMigrationLogRow = {
   id: number;
   migration: string;
@@ -798,6 +848,7 @@ export type Database = {
       document_access_log: RpcTable<DocumentAccessLogRow>;
       listing_duplicate_flags: RpcTable<ListingDuplicateFlagsRow>;
       data_migration_log: RpcTable<DataMigrationLogRow>;
+      staff_members: RpcTable<StaffMembersRow>;
     };
     Views: Record<string, never>;
     Functions: {
@@ -911,6 +962,34 @@ export type Database = {
       };
       run_daily_maintenance: { Args: Record<string, never>; Returns: Record<string, number> };
       enqueue_calendar_reminders: { Args: Record<string, never>; Returns: number };
+      admin_moderate_listing: {
+        Args: {
+          p_property_id: string;
+          p_action: "unpublish" | "suspend" | "restore" | "clear_flag";
+          p_reason?: string | null;
+        };
+        Returns: undefined;
+      };
+      admin_review_duplicate: {
+        Args: { p_flag_id: string; p_status: "dismissed" | "confirmed" };
+        Returns: undefined;
+      };
+      admin_revoke_strike: { Args: { p_strike_id: string; p_reason: string }; Returns: undefined };
+      admin_cancel_featured: { Args: { p_slot_id: string }; Returns: undefined };
+      admin_set_compound_hidden: {
+        Args: { p_compound_id: string; p_hidden: boolean };
+        Returns: undefined;
+      };
+      my_admin_access: { Args: Record<string, never>; Returns: AdminAccess | null };
+      admin_upsert_staff: {
+        Args: { p_email: string; p_title: string; p_permissions: AdminPermission[] };
+        Returns: string;
+      };
+      admin_set_staff_active: {
+        Args: { p_profile_id: string; p_active: boolean };
+        Returns: undefined;
+      };
+      admin_list_staff: { Args: Record<string, never>; Returns: StaffListRow[] };
     };
     Enums: {
       user_role: UserRoleEnum;
