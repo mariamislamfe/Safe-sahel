@@ -13,8 +13,9 @@ export type LocationSummary = {
 
 /**
  * Compounds (merged/hidden duplicates excluded) with a real count of their
- * live listings. Focus compounds first, in priority order; then the rest by
- * how many stays they have.
+ * live listings. Compounds that have stays come before "Coming soon" ones;
+ * within each group, focus compounds first (in priority order), then the rest
+ * by how many stays they have.
  */
 export async function getLocations(): Promise<LocationSummary[]> {
   const supabase = await createClient();
@@ -53,13 +54,17 @@ export async function getLocations(): Promise<LocationSummary[]> {
       focusRank: c.focus_rank,
     }))
     .sort((a, b) => {
+      // Places with live stays first; "Coming soon" (0 stays) at the end.
+      const aHas = a.propertyCount > 0;
+      const bHas = b.propertyCount > 0;
+      if (aHas !== bHas) return aHas ? -1 : 1;
       if (a.isFocus !== b.isFocus) return a.isFocus ? -1 : 1;
       if (a.isFocus) return (a.focusRank ?? 99) - (b.focusRank ?? 99);
       return b.propertyCount - a.propertyCount || a.name.localeCompare(b.name);
     });
 }
 
-/** Homepage: the 5 focus compounds always (0 stays → "Coming soon"), others only once they have stays. */
+/** Homepage: the 5 focus compounds always (0 stays → "Coming soon", listed last), others only once they have stays. */
 export function homepageLocations(all: LocationSummary[]): LocationSummary[] {
   return all.filter((l) => l.isFocus || l.propertyCount > 0);
 }
