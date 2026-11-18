@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { fromRealProperty } from "@/components/property-card";
+import { fromRealProperty } from "@/lib/display-property";
 import { FilterBar } from "@/components/filter-bar";
 import { SearchResultsView } from "@/components/search-results-view";
 import { getPublishedProperties, type PropertyFilters } from "@/lib/queries/properties";

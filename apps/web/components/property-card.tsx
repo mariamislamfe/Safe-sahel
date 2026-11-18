@@ -2,58 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import type { PropertyListItem } from "@/lib/queries/properties";
+import type { DisplayProperty } from "@/lib/display-property";
 import { FavoriteButton } from "@/components/favorite-button";
 import { useLocale } from "@/lib/i18n/locale-provider";
 import { getDictionary } from "@/lib/i18n/dictionary";
 import { common } from "@/lib/i18n/common";
 import { money } from "@/lib/i18n/format";
 
-export type DisplayProperty = {
-  id: string;
-  slug: string;
-  title: string;
-  compoundName: string | null;
-  imageUrl: string | null;
-  rating: number | null;
-  reviewCount: number;
-  maxGuests: number;
-  bedrooms: number;
-  pricePerNight: number;
-  dayUseAvailable: boolean;
-  verified: boolean;
-  hostType: "owner" | "broker" | null;
-  founding: boolean;
-  monthlyRental: boolean;
-  featured: boolean;
-  amenities: string[];
-  latitude: number | null;
-  longitude: number | null;
-};
-
-export function fromRealProperty(p: PropertyListItem): DisplayProperty {
-  return {
-    id: p.id,
-    slug: p.slug,
-    title: p.title,
-    compoundName: p.compoundName,
-    imageUrl: p.coverImageUrl,
-    rating: p.rating,
-    reviewCount: p.reviewCount,
-    maxGuests: p.maxGuests,
-    bedrooms: p.bedrooms,
-    pricePerNight: p.pricePerNight,
-    dayUseAvailable: p.dayUseEnabled,
-    verified: p.host.verified,
-    hostType: p.host.hostType,
-    founding: p.host.founding,
-    monthlyRental: p.monthlyRentalEnabled,
-    featured: p.featured,
-    amenities: p.amenityPreview,
-    latitude: p.latitude,
-    longitude: p.longitude,
-  };
-}
+export type { DisplayProperty };
 
 export function PropertyCard({
   property,

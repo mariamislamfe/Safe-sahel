@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getLocale } from "@/lib/locale";
 import { dashboardDict } from "@/lib/i18n/dashboard";
 import { getPropertiesByIds } from "@/lib/queries/properties";
-import { PropertyCard, fromRealProperty } from "@/components/property-card";
+import { PropertyCard } from "@/components/property-card";
+import { fromRealProperty } from "@/lib/display-property";
 import { EmptyState, PageHeader } from "@/components/admin/ui";
 
 export default async function FavoritesPage() {
