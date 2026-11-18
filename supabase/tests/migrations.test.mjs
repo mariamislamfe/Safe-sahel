@@ -1,4 +1,4 @@
-// Database integration tests for migrations 0001–0020 (+ down/up round trip),
+// Database integration tests for migrations 0001–0022 (+ down/up round trip, demo seed),
 // run against PGlite (WASM Postgres) with stubbed Supabase auth/storage schemas.
 //
 //   mkdir /tmp/pg && cd /tmp/pg && npm i @electric-sql/pglite@0.2.17
@@ -886,7 +886,52 @@ insert into public.availability_blocks (property_id, range, reason, booking_id) 
     "listing_blockers stays locked for clients",
   );
 
+  console.log("\n== 0021 property types ==");
+  await exec(
+    `insert into properties (id, owner_id, title, slug, type, status, price_per_night) values
+     ('d0000000-0000-0000-0000-000000000001', '${U.owner}', 'Flat', 'flat-0021', 'apartment', 'draft', 900),
+     ('d0000000-0000-0000-0000-000000000002', '${U.owner}', 'Twin', 'twin-0021', 'twin_house', 'draft', 900);`,
+    "0021 legacy rows",
+  );
+  await exec(fs.readFileSync(path.join(MIG, "0021_property_types.sql"), "utf8"), "0021");
+  rows = await q(
+    `select slug, type::text as type from properties where slug in ('flat-0021','twin-0021') order by slug`,
+  );
+  ok(
+    rows[0].type === "chalet" && rows[1].type === "villa",
+    "apartment → chalet, twin_house → villa",
+  );
+  await exec(
+    `insert into properties (owner_id, title, slug, type, status, price_per_night)
+     values ('${U.owner}', 'Studio', 'studio-0021', 'studio', 'draft', 700);`,
+    "0021 studio insert",
+  );
+  ok(true, "studio listings can be created");
+  await expectError(
+    q(
+      `insert into properties (owner_id, title, slug, type, status, price_per_night) values ('${U.owner}', 'Hotel', 'flat-new', 'apartment', 'draft', 900)`,
+    ),
+    "properties_allowed_type",
+    "new apartments are blocked",
+  );
+
+  await exec(fs.readFileSync(path.join(MIG, "0022_admin_delete.sql"), "utf8"), "0022");
+  ok(true, "0022 applies");
+
   console.log("\n== Down migration, then up again ==");
+  await exec(
+    fs.readFileSync(path.join(MIG, "down", "0022_admin_delete.down.sql"), "utf8"),
+    "down 0022",
+  );
+  await exec(
+    fs.readFileSync(path.join(MIG, "down", "0021_property_types.down.sql"), "utf8"),
+    "down 0021",
+  );
+  ok(
+    (await q(`select type::text as type from properties where slug = 'studio-0021'`))[0].type ===
+      "chalet",
+    "after 0021 down, studios become chalets",
+  );
   await exec(
     fs.readFileSync(path.join(MIG, "down", "0020_signup_phone_and_terms.down.sql"), "utf8"),
     "down 0020",
@@ -929,6 +974,118 @@ insert into public.availability_blocks (property_id, range, reason, booking_id) 
     "0020 re-apply",
   );
   ok(true, "0020 re-applies cleanly after down");
+  await exec(fs.readFileSync(path.join(MIG, "0021_property_types.sql"), "utf8"), "0021 re-apply");
+  ok(true, "0021 re-applies cleanly after down");
+  await exec(fs.readFileSync(path.join(MIG, "0022_admin_delete.sql"), "utf8"), "0022 re-apply");
+  ok(true, "0022 re-applies cleanly after down");
+
+  console.log("\n== Demo seed + admin delete ==");
+  // Supabase's real auth tables have more columns than our stub, plus pgcrypto in `extensions`.
+  await exec(
+    `alter table auth.users
+       add column if not exists instance_id uuid, add column if not exists aud text,
+       add column if not exists role text, add column if not exists encrypted_password text,
+       add column if not exists email_confirmed_at timestamptz, add column if not exists created_at timestamptz,
+       add column if not exists updated_at timestamptz, add column if not exists raw_app_meta_data jsonb,
+       add column if not exists is_super_admin boolean, add column if not exists confirmation_token text,
+       add column if not exists recovery_token text, add column if not exists email_change_token_new text,
+       add column if not exists email_change text;
+     create table auth.identities (id uuid primary key default gen_random_uuid(), provider_id text,
+       user_id uuid references auth.users (id) on delete cascade, identity_data jsonb, provider text,
+       last_sign_in_at timestamptz, created_at timestamptz, updated_at timestamptz);
+     create schema if not exists extensions;
+     create function extensions.gen_salt(text) returns text language sql as $$ select 'salt' $$;
+     create function extensions.crypt(text, text) returns text language sql as $$ select md5($1 || $2) $$;`,
+    "auth stub extras",
+  );
+  const seedSql = fs.readFileSync(path.join(MIG, "..", "seed", "demo.sql"), "utf8");
+  await exec(seedSql, "demo seed");
+  const D = (n) => `de000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  rows = await q(
+    `select count(*) filter (where status = 'published')::int pub, count(*)::int total
+     from properties where owner_id in ('${D(1)}','${D(2)}','${D(3)}')`,
+  );
+  ok(
+    rows[0].pub === 6 && rows[0].total === 7,
+    `demo: 6 published + 1 draft (got ${rows[0].pub}/${rows[0].total})`,
+  );
+  rows = await q(
+    `select status::text as status, count(*)::int c from bookings where guest_id in ('${D(11)}','${D(12)}') group by status order by status`,
+  );
+  const byStatus = Object.fromEntries(rows.map((r) => [r.status, r.c]));
+  ok(
+    byStatus.pending === 2 && byStatus.confirmed === 4,
+    `demo bookings: 2 pending, 4 confirmed (got ${JSON.stringify(byStatus)})`,
+  );
+  ok(
+    (
+      await q(
+        `select count(*)::int c from notifications where recipient_id = '${D(1)}' and kind = 'booking_request'`,
+      )
+    )[0].c === 2,
+    "demo owner got booking-request notifications via the real RPC",
+  );
+  ok(
+    (await q(`select phone, verified from profiles where id = '${D(1)}'`))[0].verified === true,
+    "demo owner is verified",
+  );
+  ok(
+    (await q(`select listing_blockers('${D(107)}', '${D(3)}', 3000) b`))[0].b.includes(
+      "owner_not_verified",
+    ),
+    "unverified owner's draft explains why it's not live",
+  );
+  await exec(seedSql, "demo seed again");
+  ok(
+    (await q(`select count(*)::int c from properties where owner_id = '${D(1)}'`))[0].c === 3,
+    "running the seed twice changes nothing",
+  );
+
+  await expectError(
+    as(D(1), () => q(`select admin_delete_property('${D(102)}')`)),
+    "not_authorized",
+    "owners can't use admin delete",
+  );
+  await expectError(
+    as(U.owner, () => q(`select purge_user('${D(11)}')`)),
+    "permission denied",
+    "purge_* is not callable by clients",
+  );
+  await as(U.admin, () => q(`select admin_delete_property('${D(102)}')`));
+  ok(
+    (await q(`select count(*)::int c from properties where id = '${D(102)}'`))[0].c === 0 &&
+      (await q(`select count(*)::int c from bookings where property_id = '${D(102)}'`))[0].c === 0,
+    "admin deletes a listing with past + pending bookings and a review",
+  );
+  await expectError(
+    as(U.admin, () => q(`select admin_delete_user('${U.admin}')`)),
+    "cannot_delete_self",
+    "founder can't delete themselves",
+  );
+  await as(U.admin, () => q(`select admin_delete_user('${D(12)}')`));
+  ok(
+    (await q(`select count(*)::int c from profiles where id = '${D(12)}'`))[0].c === 0 &&
+      (await q(`select count(*)::int c from auth.users where id = '${D(12)}'`))[0].c === 0 &&
+      (await q(`select count(*)::int c from bookings where guest_id = '${D(12)}'`))[0].c === 0,
+    "admin deletes a guest with bookings and reviews",
+  );
+  await as(U.admin, () => q(`select admin_delete_user('${D(2)}')`));
+  ok(
+    (await q(`select count(*)::int c from properties where owner_id = '${D(2)}'`))[0].c === 0,
+    "admin deletes an owner together with their listings",
+  );
+
+  await exec(fs.readFileSync(path.join(MIG, "..", "seed", "demo-clean.sql"), "utf8"), "demo clean");
+  ok(
+    (await q(`select count(*)::int c from auth.users where email like '%@demo.safesahel.test'`))[0]
+      .c === 0 &&
+      (await q(`select count(*)::int c from properties where slug like 'demo-%'`))[0].c === 0,
+    "demo-clean removes every demo account and listing",
+  );
+  ok(
+    (await q(`select count(*)::int c from profiles where id = '${U.owner}'`))[0].c === 1,
+    "demo-clean leaves real users alone",
+  );
 } catch (e) {
   console.log("UNHANDLED:", e.message, "|", e.where);
   failures++;

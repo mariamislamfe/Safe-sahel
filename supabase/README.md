@@ -120,8 +120,22 @@ running them in order once is enough; there's no down-migration story yet.
   accepted terms version into `profiles`, and adds the `missing_phone` publish
   blocker (hosts need a WhatsApp number). Revert with
   [`down/0020_signup_phone_and_terms.down.sql`](./migrations/down/0020_signup_phone_and_terms.down.sql).
+- `0021_property_types.sql` — chalets, villas and studios only: adds `studio`,
+  remaps apartment → chalet and twin/town house → villa, and adds a check
+  constraint. Revert with [`down/0021_property_types.down.sql`](./migrations/down/0021_property_types.down.sql).
+- `0022_admin_delete.sql` — permanent delete for the founder:
+  `admin_delete_property` / `admin_delete_user` (plus internal `purge_*`
+  helpers that clear RESTRICT-linked rows in order). Storage files aren't
+  removed. Revert with [`down/0022_admin_delete.down.sql`](./migrations/down/0022_admin_delete.down.sql).
 
-**Reverting 0018:** (revert 0020, then 0019 first) run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
+## Demo data
+
+Paste [`seed/demo.sql`](./seed/demo.sql) into the SQL Editor (needs 0022) to
+create demo owners/guests (password `Demo@12345`), 6 published listings, past
+stays with reviews and live booking requests made through the real RPCs.
+Remove it all with [`seed/demo-clean.sql`](./seed/demo-clean.sql).
+
+**Reverting 0018:** (revert 0022, 0021, 0020, then 0019 first) run [`down/0018_business_alignment.down.sql`](./migrations/down/0018_business_alignment.down.sql).
 It restores the moved/unpublished rows from `data_migration_log` and drops
 everything 0018 added (export new tables first if you want to keep them).
 

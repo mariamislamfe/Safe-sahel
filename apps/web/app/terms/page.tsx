@@ -91,7 +91,7 @@ const content: Record<
           "مفيش استرداد لأي جزء من الباقة بعد تفعيلها، حتى لو وقفت الإعلان أو أرشفته أو قفلت الاستضافة في نص المدة، أو لو الإعلان اتوقف بسبب مخالفة للشروط دي. ده بينطبق برضه على التمييز (Featured).",
           "لو الإدارة رفضت إثبات الدفع (مثلاً المبلغ أو رقم العملية مش مطابق)، الاشتراك مش هيتفعل، وتقدر تتواصل معانا لتسوية التحويل.",
           "ضمان باقة الموسم: لو ماجالكش ولا طلب حجز خلال أول 30 يوم من باقة الموسم، بنضيفلك شهر مجاني. ده التعويض الوحيد، ومش بيترد فلوس.",
-          "الأسعار ممكن تتغير، لكن التغيير مش بيأثر على مدة إنت دفعتها خلاص. والملاك المؤسسين أسعار الإطلاق ثابتة ليهم سنتين.",
+          "الأسعار ممكن تتغير، لكن التغيير مش بيأثر على مدة إنت دفعتها خلاص. والملاك المؤسسين (اللي بدأوا الاستضافة قبل 1 أبريل 2027) سعر الإطلاق ثابت ليهم لحد 1 أبريل 2029.",
         ],
       },
       {
@@ -186,7 +186,7 @@ const content: Record<
           "No refunds are given for any unused part of a plan once it is activated — including if you unpublish or archive the listing, turn off hosting mid-plan, or the listing is suspended for breaking these terms. The same applies to Featured placement.",
           "If an admin rejects a payment proof (e.g. the amount or reference doesn't match), the subscription is not activated and you can contact us to settle the transfer.",
           "Season guarantee: if a season-plan listing gets no booking requests in its first 30 days, we add one free month. This is the only remedy; it is not paid out in cash.",
-          "Prices may change, but changes never affect a period you have already paid for. Founding Hosts keep launch prices for 2 years.",
+          "Prices may change, but changes never affect a period you have already paid for. Founding Hosts (who started hosting before 1 April 2027) keep the launch price until 1 April 2029.",
         ],
       },
       {

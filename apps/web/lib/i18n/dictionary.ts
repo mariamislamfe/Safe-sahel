@@ -66,11 +66,12 @@ export const dictionary = {
         "List it on Safe Sahel and get booking requests directly — zero commission, full control over your calendar.",
       ctaButton: "Register as a Founding Host",
       founderBadge: "Founding Host offer",
-      founderOffer: "Completely free until April. Register now and get Founding Host perks.",
+      founderOffer:
+        "Listing is completely free until 1 April 2027. Hosts who join before then become Founding Hosts and keep:",
       founderPerks: [
-        "Launch prices locked for 2 years",
-        "First month of Featured free",
-        "Founding Host badge",
+        "Our lowest (launch) price locked until April 2029 — even when prices go up",
+        "1 free month of Featured placement for one listing",
+        "A Founding Host badge on your listings",
       ],
       guarantee:
         "If you don't get a single booking request in the first 30 days of a Season plan, next month is on us.",
@@ -78,8 +79,7 @@ export const dictionary = {
       categories: {
         villa: "Villas",
         chalet: "Chalets",
-        apartment: "Apartments",
-        hotel: "Hotels",
+        studio: "Studios",
       },
     },
     search: {
@@ -256,19 +256,19 @@ export const dictionary = {
         "اعرضه على سيف الساحل وتوصلك طلبات الحجز مباشرة — من غير أي عمولة، والكالندر في إيدك.",
       ctaButton: "سجّل كمالك مؤسس",
       founderBadge: "عرض المالك المؤسس",
-      founderOffer: "مجاناً تماماً لحد أبريل. سجّل دلوقتي واحصل على مميزات المالك المؤسس",
+      founderOffer:
+        "عرض إعلانك مجاني تماماً لحد 1 أبريل 2027. وأي مالك ينضم قبلها يبقى «مالك مؤسس» وياخد:",
       founderPerks: [
-        "أسعار الإطلاق ثابتة لمدة سنتين",
-        "أول شهر تمييز (Featured) مجاناً",
-        "شارة المالك المؤسس",
+        "أقل سعر عندنا (سعر الإطلاق) ثابت ليك لحد أبريل 2029 — حتى لو الأسعار زادت",
+        "شهر تمييز (Featured) مجاني لإعلان واحد",
+        "علامة «مالك مؤسس» على إعلاناتك",
       ],
       guarantee: "لو ما جالكش ولا طلب حجز في أول 30 يوم من باقة الموسم، الشهر الجاي علينا",
       seeAll: "شوف الكل ←",
       categories: {
         villa: "فيلات",
         chalet: "شاليهات",
-        apartment: "شقق",
-        hotel: "فنادق",
+        studio: "ستوديوهات",
       },
     },
     search: {

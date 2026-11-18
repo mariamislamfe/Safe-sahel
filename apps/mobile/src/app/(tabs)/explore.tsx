@@ -8,8 +8,7 @@ import { PropertyCard, fromRealProperty } from "@/components/property-card";
 const categories = [
   { id: "villa", label: "Villas" },
   { id: "chalet", label: "Chalets" },
-  { id: "apartment", label: "Apartments" },
-  { id: "hotel", label: "Hotels" },
+  { id: "studio", label: "Studios" },
 ] as const;
 
 export default function ExploreScreen() {

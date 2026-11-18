@@ -48,6 +48,7 @@ const en = {
   propertyTypes: {
     chalet: "Chalet",
     villa: "Villa",
+    studio: "Studio",
     apartment: "Apartment",
     twin_house: "Twin house",
     town_house: "Town house",
@@ -90,6 +91,8 @@ const en = {
     strikes: "Under admin review (strikes)",
   } as Record<string, string>,
   errors: {
+    cannot_delete_self: "You can't delete your own account from here.",
+    cannot_delete_founder: "Founder accounts can't be deleted.",
     user_not_found: "No Safe Sahel account uses that email. Ask them to sign up first.",
     already_founder: "That account is already a founder with full access.",
     title_required: "Add a job title.",
@@ -196,6 +199,7 @@ const ar: typeof en = {
   propertyTypes: {
     chalet: "شاليه",
     villa: "فيلا",
+    studio: "ستوديو",
     apartment: "شقة",
     twin_house: "توين هاوس",
     town_house: "تاون هاوس",
@@ -238,6 +242,8 @@ const ar: typeof en = {
     strikes: "تحت مراجعة الإدارة (إنذارات)",
   },
   errors: {
+    cannot_delete_self: "مينفعش تمسح حسابك إنت من هنا.",
+    cannot_delete_founder: "حسابات المؤسسين مينفعش تتمسح.",
     user_not_found: "مفيش حساب على Safe Sahel بالإيميل ده. خليه يسجّل الأول.",
     already_founder: "الحساب ده مؤسس وعنده كل الصلاحيات أصلاً.",
     title_required: "اكتب المسمى الوظيفي.",

@@ -1,5 +1,17 @@
 /** Strings for the host dashboard shell/overview and the guest "account" area. */
 const en = {
+  adminDelete: {
+    delete: "Delete",
+    listingTitle: (name: string) => `Delete “${name}” permanently?`,
+    listingBody:
+      "The listing, its photos, calendar, bookings, reviews and subscriptions are removed for good. This can't be undone. To just hide it, use Unpublish or Suspend instead.",
+    userTitle: (name: string) => `Delete ${name}'s account permanently?`,
+    userBody:
+      "Their login, profile, all their listings and bookings, reviews and payments are removed for good. This can't be undone.",
+    confirm: "Delete permanently",
+    listingDeleted: "Listing deleted",
+    userDeleted: "Account deleted",
+  },
   toasts: {
     bookingConfirmed: "Booking confirmed — the guest has been notified",
     bookingDeclined: "Request declined",
@@ -28,6 +40,10 @@ const en = {
     discard: "Start over",
     draftSaved: "Draft saved on this device",
     fixErrors: "Please fix the highlighted fields first.",
+    fixFields: (names: string) => `Check: ${names}`,
+    invalid: "Check this value",
+    required: "Required",
+    requiredLegend: "Fields marked * are required. Everything else is optional.",
   },
   host: {
     brand: "Host dashboard",
@@ -139,6 +155,18 @@ const en = {
 };
 
 const ar: typeof en = {
+  adminDelete: {
+    delete: "حذف",
+    listingTitle: (name: string) => `تمسح «${name}» نهائياً؟`,
+    listingBody:
+      "الإعلان وصوره والكالندر والحجوزات والتقييمات والاشتراكات هيتمسحوا نهائياً، ومفيش رجوع. لو عايز تخفيه بس، استخدم «إخفاء» أو «إيقاف».",
+    userTitle: (name: string) => `تمسح حساب ${name} نهائياً؟`,
+    userBody:
+      "تسجيل الدخول والبروفايل وكل إعلاناته وحجوزاته وتقييماته ومدفوعاته هيتمسحوا نهائياً، ومفيش رجوع.",
+    confirm: "امسح نهائياً",
+    listingDeleted: "الإعلان اتمسح",
+    userDeleted: "الحساب اتمسح",
+  },
   toasts: {
     bookingConfirmed: "الحجز اتأكد — الضيف وصله إشعار",
     bookingDeclined: "الطلب اترفض",
@@ -167,6 +195,10 @@ const ar: typeof en = {
     discard: "ابدأ من الأول",
     draftSaved: "المسودة متحفظة على الجهاز ده",
     fixErrors: "صلّح الخانات المعلّمة الأول.",
+    fixFields: (names: string) => `راجع: ${names}`,
+    invalid: "راجع القيمة دي",
+    required: "مطلوب",
+    requiredLegend: "الخانات اللي عليها * مطلوبة. الباقي اختياري.",
   },
   host: {
     brand: "لوحة المالك",

@@ -11,7 +11,14 @@
  */
 
 export type UserRoleEnum = "guest" | "owner" | "admin";
-export type PropertyTypeEnum = "chalet" | "villa" | "apartment" | "twin_house" | "town_house";
+export type PropertyTypeEnum =
+  | "chalet"
+  | "villa"
+  | "studio"
+  // Legacy values (remapped by 0021, blocked by a check constraint).
+  | "apartment"
+  | "twin_house"
+  | "town_house";
 export type PropertyStatusEnum = "draft" | "pending_review" | "published" | "suspended";
 export type ViewTypeEnum = "sea_view" | "lagoon_view" | "garden_view" | "street_view" | "no_view";
 export type CancellationPolicyEnum = "flexible" | "moderate" | "strict";
@@ -990,6 +997,8 @@ export type Database = {
         Returns: undefined;
       };
       admin_list_staff: { Args: Record<string, never>; Returns: StaffListRow[] };
+      admin_delete_property: { Args: { p_property_id: string }; Returns: undefined };
+      admin_delete_user: { Args: { p_profile_id: string }; Returns: undefined };
     };
     Enums: {
       user_role: UserRoleEnum;

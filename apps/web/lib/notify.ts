@@ -85,8 +85,8 @@ export function renderNotification(kind: string, payload: Record<string, unknown
       return bilingual(
         "الفترة المجانية قربت تخلص",
         "The free period is ending",
-        "الفترة المجانية بتخلص يوم ١ أبريل. اختار باقة عشان شاليهك يفضل ظاهر — والملاك المؤسسين أسعارهم ثابتة سنتين.",
-        "The free period ends on 1 April. Pick a plan to stay listed — Founding Hosts keep launch prices for 2 years.",
+        "الفترة المجانية بتخلص يوم ١ أبريل. اختار باقة عشان شاليهك يفضل ظاهر — والملاك المؤسسين سعر الإطلاق ثابت ليهم لحد أبريل 2029.",
+        "The free period ends on 1 April. Pick a plan to stay listed — Founding Hosts keep the launch price until April 2029.",
         "/owner/subscription",
       );
     default:

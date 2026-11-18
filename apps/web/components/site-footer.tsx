@@ -63,8 +63,21 @@ export function SiteFooter({ locale }: { locale: Locale }) {
           </div>
         ))}
       </div>
-      <div className="border-t border-border px-lg py-lg text-center text-xs text-ink-secondary">
-        © {new Date().getFullYear()} Safe Sahel. {t.rights}
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-xs border-t border-border px-lg py-lg text-xs text-ink-secondary sm:flex-row">
+        <span>
+          © {new Date().getFullYear()} Safe Sahel. {t.rights}
+        </span>
+        <span dir="ltr">
+          Made by{" "}
+          <a
+            href="https://www.instagram.com/websity.eg/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-ink transition-colors hover:text-turquoise-dark"
+          >
+            Websity
+          </a>
+        </span>
       </div>
     </footer>
   );

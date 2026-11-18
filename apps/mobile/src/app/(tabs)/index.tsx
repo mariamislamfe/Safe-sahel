@@ -10,8 +10,7 @@ import { LocationCard } from "@/components/location-card";
 const categories = [
   { id: "villa", label: "Villas", icon: "🏡" },
   { id: "chalet", label: "Chalets", icon: "🏖️" },
-  { id: "apartment", label: "Apartments", icon: "🏢" },
-  { id: "hotel", label: "Hotels", icon: "🏨" },
+  { id: "studio", label: "Studios", icon: "🛏️" },
 ] as const;
 
 export default function HomeScreen() {

@@ -8,6 +8,8 @@ import { useLocale } from "@/lib/i18n/locale-provider";
 import { adminDict } from "@/lib/i18n/admin";
 import { adminShellDict } from "@/lib/i18n/admin-shell";
 import { errorText } from "@/lib/i18n/common";
+import { dashboardDict } from "@/lib/i18n/dashboard";
+import { useFeedback } from "@/components/feedback";
 
 type Result = PromiseLike<{ error: { message: string } | null }>;
 
@@ -239,15 +241,22 @@ export function ListingAdminActions({
   status,
   flagged,
   ownerVerified,
+  title,
+  canDelete = false,
 }: {
   propertyId: string;
   ownerId: string;
   status: string;
   flagged: boolean;
   ownerVerified: boolean;
+  title?: string;
+  /** Founder only — permanent delete. */
+  canDelete?: boolean;
 }) {
   const { busy, error, run, locale } = useAction();
   const t = adminDict[locale].listings;
+  const del = dashboardDict[locale].adminDelete;
+  const fb = useFeedback();
   const supabase = createClient();
   const moderate = (action: "unpublish" | "suspend" | "restore" | "clear_flag", reason?: string) =>
     run(() =>
@@ -286,6 +295,29 @@ export function ListingAdminActions({
         {flagged && (
           <button disabled={busy} className={btn.small} onClick={() => moderate("clear_flag")}>
             {t.clearFlag}
+          </button>
+        )}
+        {canDelete && (
+          <button
+            disabled={busy}
+            className={btn.smallDanger}
+            onClick={async () => {
+              const ok = await fb.confirm({
+                title: del.listingTitle(title ?? "—"),
+                body: del.listingBody,
+                tone: "danger",
+                confirmLabel: del.confirm,
+              });
+              if (!ok) return;
+              if (
+                await run(() =>
+                  supabase.rpc("admin_delete_property", { p_property_id: propertyId }),
+                )
+              )
+                fb.toast(del.listingDeleted);
+            }}
+          >
+            {del.delete}
           </button>
         )}
         {ownerVerified && (
@@ -432,6 +464,35 @@ export function GrantFeatured({ listings }: { listings: { id: string; title: str
           {t.grant}
         </button>
       </div>
+      <Err e={error} />
+    </div>
+  );
+}
+
+/** Founder-only permanent account delete (listings, bookings, payments go too). */
+export function DeleteUserButton({ userId, name }: { userId: string; name: string }) {
+  const { busy, error, run, locale } = useAction();
+  const del = dashboardDict[locale].adminDelete;
+  const fb = useFeedback();
+  return (
+    <div className="flex flex-col items-end gap-xs">
+      <button
+        disabled={busy}
+        className={btn.smallDanger}
+        onClick={async () => {
+          const ok = await fb.confirm({
+            title: del.userTitle(name),
+            body: del.userBody,
+            tone: "danger",
+            confirmLabel: del.confirm,
+          });
+          if (!ok) return;
+          if (await run(() => createClient().rpc("admin_delete_user", { p_profile_id: userId })))
+            fb.toast(del.userDeleted);
+        }}
+      >
+        {del.delete}
+      </button>
       <Err e={error} />
     </div>
   );

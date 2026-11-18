@@ -41,7 +41,8 @@ const en = {
     strikeItem: (date: string, ref: string) => `${date} · booking ${ref}`,
     noticesTitle: "Recent updates",
     founderBadge: "You're a Founding Host 🎉",
-    founderPerks: "Launch prices locked for 2 years + your first month of Featured free.",
+    founderPerks:
+      "Your launch price is locked until April 2029, and you get 1 free month of Featured for one listing (claim it from Subscription).",
     notifications: {
       booking_request: "New booking request",
       booking_cancelled_by_guest: "A guest cancelled",
@@ -198,7 +199,8 @@ const en = {
     title: "Subscription",
     freeBanner: (date: string) =>
       `Everything is free until ${date}. You can pick a plan now — paid time starts when the free period ends.`,
-    founderYes: "Founding Host: launch prices locked for 2 years + first Featured month free.",
+    founderYes:
+      "Founding Host: you pay our lowest (launch) price until April 2029, plus 1 free month of Featured for one listing.",
     founderNo: "Standard pricing applies after the launch year.",
     brokerDiscount: (pct: number, n: number) => `Broker volume discount: ${pct}% (${n} listings)`,
     brokerDiscountNone: (n: number) =>
@@ -314,7 +316,8 @@ const ar: typeof en = {
     strikeItem: (date: string, ref: string) => `${date} · حجز ${ref}`,
     noticesTitle: "آخر التحديثات",
     founderBadge: "إنت مالك مؤسس 🎉",
-    founderPerks: "أسعار الإطلاق ثابتة لمدة سنتين + أول شهر تمييز (Featured) مجاناً.",
+    founderPerks:
+      "سعر الإطلاق ثابت ليك لحد أبريل 2029، وليك شهر تمييز مجاني لإعلان واحد (فعّله من صفحة الاشتراك).",
     notifications: {
       booking_request: "طلب حجز جديد",
       booking_cancelled_by_guest: "ضيف لغى الحجز",
@@ -469,7 +472,8 @@ const ar: typeof en = {
     title: "الاشتراك",
     freeBanner: (date: string) =>
       `كل حاجة مجاناً لحد ${date}. تقدر تختار باقة دلوقتي — المدة المدفوعة بتبدأ بعد ما الفترة المجانية تخلص.`,
-    founderYes: "مالك مؤسس: أسعار الإطلاق ثابتة لمدة سنتين + أول شهر تمييز مجاناً.",
+    founderYes:
+      "مالك مؤسس: بتدفع أقل سعر عندنا (سعر الإطلاق) لحد أبريل 2029، ومعاه شهر تمييز مجاني لإعلان واحد.",
     founderNo: "الأسعار العادية بتتطبق بعد سنة الإطلاق.",
     brokerDiscount: (pct: number, n: number) => `خصم الوسيط على الكمية: ${pct}% (${n} إعلانات)`,
     brokerDiscountNone: (n: number) => `خصم الوسيط: ١٥٪ من ٥ إعلانات، ٢٥٪ من ١٠ (عندك ${n}).`,

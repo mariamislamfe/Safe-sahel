@@ -4,6 +4,7 @@ import { adminShellDict } from "@/lib/i18n/admin-shell";
 import { common } from "@/lib/i18n/common";
 import { date } from "@/lib/i18n/format";
 import { requireSection } from "@/lib/admin-access";
+import { DeleteUserButton } from "@/components/admin-actions";
 import {
   Avatar,
   EmptyState,
@@ -21,11 +22,14 @@ const ROLES = ["all", "guest", "owner", "admin"] as const;
 const ROLE_TONE: Record<string, PillTone> = { guest: "neutral", owner: "success", admin: "info" };
 
 export default async function AdminUsersPage(props: PageProps<"/admin/users">) {
-  await requireSection("users");
+  const access = await requireSection("users");
   const params = await props.searchParams;
   const role = (ROLES as readonly string[]).includes(String(params.r)) ? String(params.r) : "all";
   const q = typeof params.q === "string" ? params.q.trim() : "";
   const supabase = await createClient();
+  const {
+    data: { user: me },
+  } = await supabase.auth.getUser();
   const locale = await getLocale();
   const t = adminShellDict[locale].users;
   const c = common[locale];
@@ -67,13 +71,14 @@ export default async function AdminUsersPage(props: PageProps<"/admin/users">) {
       {rows.length === 0 ? (
         <EmptyState icon="users" title={t.empty} />
       ) : (
-        <Table minWidth={600}>
+        <Table minWidth={access.founder ? 700 : 600}>
           <thead>
             <tr>
               <Th>{t.name}</Th>
               <Th>{t.role}</Th>
               <Th>{t.verified}</Th>
               <Th end>{t.joined}</Th>
+              {access.founder && <Th end />}
             </tr>
           </thead>
           <tbody>
@@ -108,6 +113,13 @@ export default async function AdminUsersPage(props: PageProps<"/admin/users">) {
                 <Td end className="whitespace-nowrap text-ink-secondary">
                   {date(locale, u.created_at)}
                 </Td>
+                {access.founder && (
+                  <Td end>
+                    {u.role !== "admin" && u.id !== me?.id && (
+                      <DeleteUserButton userId={u.id} name={u.full_name ?? "—"} />
+                    )}
+                  </Td>
+                )}
               </Tr>
             ))}
           </tbody>

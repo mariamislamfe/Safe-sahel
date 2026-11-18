@@ -34,7 +34,7 @@ const STATUS_TONE: Record<string, PillTone> = {
 };
 
 export default async function AdminPropertiesPage(props: PageProps<"/admin/properties">) {
-  await requireSection("listings");
+  const access = await requireSection("listings");
   const params = await props.searchParams;
   const filter = (FILTERS as readonly string[]).includes(String(params.f))
     ? String(params.f)
@@ -198,6 +198,8 @@ export default async function AdminPropertiesPage(props: PageProps<"/admin/prope
                       status={p.status}
                       flagged={p.flagged_for_review}
                       ownerVerified={owner?.verified ?? false}
+                      title={p.title}
+                      canDelete={access.founder}
                     />
                   </Td>
                 </Tr>

@@ -27,10 +27,27 @@ import { Icon } from "@/components/admin/icons";
 /** Fields validated before leaving each step (the rest are optional). */
 const STEP_FIELDS: (keyof PropertyFormInput)[][] = [
   ["title", "type", "compoundId", "unitAddress", "description"],
-  ["bedrooms", "bathrooms", "maxGuests", "floor", "sizeSqm", "beds"],
+  [
+    "bedrooms",
+    "bathrooms",
+    "maxGuests",
+    "floor",
+    "viewType",
+    "sizeSqm",
+    "beds",
+    "checkInInstructions",
+    "villageEntryRequirements",
+    "beachAccessDetails",
+  ],
   ["pricePerNight", "minStayNights", "dayUsePrice", "monthlyPrice", "cancellationPolicy"],
   ["amenityIds", "status"],
 ];
+
+const stepOf = (field: string) =>
+  Math.max(
+    0,
+    STEP_FIELDS.findIndex((fields) => (fields as string[]).includes(field)),
+  );
 
 type Props = {
   ownerId: string;
@@ -39,6 +56,13 @@ type Props = {
   existing?: OwnerPropertyFull;
   existingAmenityIds?: string[];
 };
+
+/** Legacy types (pre-0021) map to the closest allowed one, same as the migration. */
+function allowedType(type: string): PropertyFormInput["type"] {
+  if (type === "villa" || type === "twin_house" || type === "town_house") return "villa";
+  if (type === "studio") return "studio";
+  return "chalet";
+}
 
 function slugify(title: string) {
   return (
@@ -88,13 +112,15 @@ export function PropertyForm({
     trigger,
     reset,
     getValues,
+    getFieldState,
+    setFocus,
     formState: { errors, isSubmitting },
   } = useForm<PropertyFormInput>({
     resolver: zodResolver(propertyFormSchema),
     defaultValues: existing
       ? {
           title: existing.title,
-          type: existing.type,
+          type: allowedType(existing.type),
           compoundId: existing.compoundId,
           description: existing.description ?? "",
           bedrooms: existing.bedrooms,
@@ -191,10 +217,60 @@ export function PropertyForm({
   }
 
   async function nextStep() {
-    const ok = await trigger(STEP_FIELDS[step]);
-    if (!ok) return fb.toast(f.fixErrors, "error");
+    const fields = STEP_FIELDS[step]!;
+    const ok = await trigger(fields, { shouldFocus: true });
+    if (!ok) {
+      const bad = fields.filter((name) => getFieldState(name).invalid);
+      return fb.toast(f.fixFields(bad.map((n) => fieldLabel(n)).join("، ")), "error");
+    }
     goTo(Math.min(step + 1, STEP_FIELDS.length - 1));
   }
+
+  /** Final submit failed: jump to the step with the first bad field and focus it. */
+  function onInvalid(errs: Partial<Record<keyof PropertyFormInput, unknown>>) {
+    const bad = Object.keys(errs) as (keyof PropertyFormInput)[];
+    if (bad.length === 0) return;
+    const target = bad.sort((a, b) => stepOf(a) - stepOf(b))[0]!;
+    setStep(stepOf(target));
+    setTimeout(() => setFocus(target), 60);
+    fb.toast(f.fixFields(bad.map((n) => fieldLabel(n)).join("، ")), "error");
+  }
+
+  // Human label + message for any field's validation error (not just a few).
+  function fieldLabel(name: keyof PropertyFormInput): string {
+    const labels: Partial<Record<keyof PropertyFormInput, string>> = {
+      title: t.title,
+      type: t.type,
+      compoundId: t.compound,
+      unitAddress: t.unitAddress,
+      description: t.description,
+      bedrooms: t.bedrooms,
+      bathrooms: t.bathrooms,
+      maxGuests: t.maxGuests,
+      floor: t.floor,
+      viewType: t.view,
+      sizeSqm: t.size,
+      beds: t.beds,
+      checkInInstructions: t.checkIn,
+      villageEntryRequirements: t.village,
+      beachAccessDetails: t.beachDetails,
+      pricePerNight: t.pricePerNight,
+      minStayNights: t.minStay,
+      dayUsePrice: t.dayUsePrice,
+      monthlyPrice: t.monthlyPrice,
+      cancellationPolicy: t.cancellation,
+      status: t.status,
+    };
+    return labels[name] ?? String(name);
+  }
+  const specific: Partial<Record<keyof PropertyFormInput, string>> = {
+    title: t.errTitle,
+    pricePerNight: t.errPrice,
+    dayUsePrice: t.errDayUse,
+    monthlyPrice: t.errMonthly,
+  };
+  const err = (name: keyof PropertyFormInput) =>
+    errors[name] ? (specific[name] ?? f.invalid) : undefined;
 
   const dayUseEnabled = watch("dayUseEnabled");
   const monthlyRentalEnabled = watch("monthlyRentalEnabled");
@@ -418,7 +494,7 @@ export function PropertyForm({
           void nextStep();
           return;
         }
-        void handleSubmit(onSubmit, () => fb.toast(f.fixErrors, "error"))(e);
+        void handleSubmit(onSubmit, onInvalid)(e);
       }}
       className="flex flex-col gap-xl"
     >
@@ -462,17 +538,20 @@ export function PropertyForm({
         <p className="text-xs font-medium text-ink-secondary sm:hidden">
           {f.step(step + 1, stepLabels.length)} · {stepLabels[step]}
         </p>
+        <p className="text-xs text-ink-secondary">
+          <span className="font-bold text-red-600">*</span> {f.requiredLegend}
+        </p>
       </div>
 
       <div className={step === 0 ? "flex flex-col gap-xl" : "hidden"}>
         <section className="flex flex-col gap-md">
           <h2 className="font-display text-lg font-semibold">{t.basics}</h2>
-          <Field label={t.title} error={errors.title && t.errTitle}>
+          <Field label={t.title} required error={err("title")}>
             <input {...register("title")} className={inputClass} placeholder={t.titlePlaceholder} />
           </Field>
 
           <div className="grid grid-cols-1 gap-md sm:grid-cols-2">
-            <Field label={t.type}>
+            <Field label={t.type} required error={err("type")}>
               <select {...register("type")} className={inputClass}>
                 {propertyTypeOptions.map((o) => (
                   <option key={o} value={o}>
@@ -481,7 +560,7 @@ export function PropertyForm({
                 ))}
               </select>
             </Field>
-            <Field label={t.compound}>
+            <Field label={t.compound} error={err("compoundId")}>
               <select
                 {...register("compoundId")}
                 className={inputClass}
@@ -551,11 +630,11 @@ export function PropertyForm({
             </div>
           )}
 
-          <Field label={t.unitAddress} hint={t.unitAddressHint}>
+          <Field label={t.unitAddress} hint={t.unitAddressHint} error={err("unitAddress")}>
             <input {...register("unitAddress")} className={inputClass} placeholder="B12 – 3" />
           </Field>
 
-          <Field label={t.description}>
+          <Field label={t.description} error={err("description")}>
             <textarea {...register("description")} rows={4} className={inputClass} />
           </Field>
         </section>
@@ -565,21 +644,21 @@ export function PropertyForm({
         <section className="flex flex-col gap-md">
           <h2 className="font-display text-lg font-semibold">{t.capacity}</h2>
           <div className="grid grid-cols-3 gap-md">
-            <Field label={t.bedrooms}>
+            <Field label={t.bedrooms} required error={err("bedrooms")}>
               <input type="number" min={0} {...register("bedrooms")} className={inputClass} />
             </Field>
-            <Field label={t.bathrooms}>
+            <Field label={t.bathrooms} required error={err("bathrooms")}>
               <input type="number" min={0} {...register("bathrooms")} className={inputClass} />
             </Field>
-            <Field label={t.maxGuests}>
+            <Field label={t.maxGuests} required error={err("maxGuests")}>
               <input type="number" min={1} {...register("maxGuests")} className={inputClass} />
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-md">
-            <Field label={t.floor}>
+            <Field label={t.floor} error={err("floor")}>
               <input type="number" {...register("floor")} className={inputClass} />
             </Field>
-            <Field label={t.view}>
+            <Field label={t.view} error={err("viewType")}>
               <select
                 {...register("viewType")}
                 className={inputClass}
@@ -604,14 +683,14 @@ export function PropertyForm({
         <section className="flex flex-col gap-md">
           <h2 className="font-display text-lg font-semibold">{t.moreDetails}</h2>
           <div className="grid grid-cols-2 gap-md">
-            <Field label={t.size}>
+            <Field label={t.size} error={err("sizeSqm")}>
               <input type="number" min={1} {...register("sizeSqm")} className={inputClass} />
             </Field>
-            <Field label={t.beds}>
+            <Field label={t.beds} error={err("beds")}>
               <input type="number" min={1} {...register("beds")} className={inputClass} />
             </Field>
           </div>
-          <Field label={t.checkIn}>
+          <Field label={t.checkIn} error={err("checkInInstructions")}>
             <textarea
               {...register("checkInInstructions")}
               rows={2}
@@ -619,7 +698,7 @@ export function PropertyForm({
               className={inputClass}
             />
           </Field>
-          <Field label={t.village}>
+          <Field label={t.village} error={err("villageEntryRequirements")}>
             <textarea
               {...register("villageEntryRequirements")}
               rows={2}
@@ -628,7 +707,7 @@ export function PropertyForm({
             />
           </Field>
           {beachAccess && (
-            <Field label={t.beachDetails}>
+            <Field label={t.beachDetails} error={err("beachAccessDetails")}>
               <textarea
                 {...register("beachAccessDetails")}
                 rows={2}
@@ -644,10 +723,10 @@ export function PropertyForm({
         <section className="flex flex-col gap-md">
           <h2 className="font-display text-lg font-semibold">{t.pricing}</h2>
           <div className="grid grid-cols-2 gap-md">
-            <Field label={t.pricePerNight} error={errors.pricePerNight && t.errPrice}>
+            <Field label={t.pricePerNight} required error={err("pricePerNight")}>
               <input type="number" min={1} {...register("pricePerNight")} className={inputClass} />
             </Field>
-            <Field label={t.minStay}>
+            <Field label={t.minStay} required error={err("minStayNights")}>
               <input type="number" min={1} {...register("minStayNights")} className={inputClass} />
             </Field>
           </div>
@@ -680,13 +759,13 @@ export function PropertyForm({
 
           <Checkbox label={t.dayUse} {...register("dayUseEnabled")} />
           {dayUseEnabled && (
-            <Field label={t.dayUsePrice} error={errors.dayUsePrice && t.errDayUse}>
+            <Field label={t.dayUsePrice} required error={err("dayUsePrice")}>
               <input type="number" min={1} {...register("dayUsePrice")} className={inputClass} />
             </Field>
           )}
           <Checkbox label={`🎓 ${t.monthly}`} {...register("monthlyRentalEnabled")} />
           {monthlyRentalEnabled && (
-            <Field label={t.monthlyPrice} error={errors.monthlyPrice && t.errMonthly}>
+            <Field label={t.monthlyPrice} required error={err("monthlyPrice")}>
               <input type="number" min={1} {...register("monthlyPrice")} className={inputClass} />
             </Field>
           )}
@@ -700,7 +779,7 @@ export function PropertyForm({
             <Checkbox label={t.smoking} {...register("smokingAllowed")} />
             <Checkbox label={t.photography} {...register("commercialPhotographyAllowed")} />
           </div>
-          <Field label={t.cancellation}>
+          <Field label={t.cancellation} required error={err("cancellationPolicy")}>
             <select {...register("cancellationPolicy")} className={inputClass}>
               {cancellationPolicyOptions.map((p) => (
                 <option key={p} value={p}>
@@ -742,7 +821,7 @@ export function PropertyForm({
 
         <section className="flex flex-col gap-md">
           <h2 className="font-display text-lg font-semibold">{t.visibility}</h2>
-          <Field label={t.status} hint={t.publishRules}>
+          <Field label={t.status} hint={t.publishRules} error={err("status")}>
             <select {...register("status")} className={inputClass}>
               <option value="draft">{t.draft}</option>
               <option value="published">{t.published}</option>
@@ -820,19 +899,40 @@ function Field({
   label,
   error,
   hint,
+  required = false,
   children,
 }: {
   label: string;
-  error?: string | false;
+  error?: string;
   hint?: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-xs">
-      <span className="text-sm font-medium text-ink">{label}</span>
+    <label
+      className={`flex flex-col gap-xs ${
+        error
+          ? "[&_input]:border-red-400 [&_input]:bg-red-50/40 [&_select]:border-red-400 [&_select]:bg-red-50/40 [&_textarea]:border-red-400 [&_textarea]:bg-red-50/40"
+          : ""
+      }`}
+    >
+      <span className={`text-sm font-medium ${error ? "text-red-700" : "text-ink"}`}>
+        {label}
+        {required && (
+          <span className="ms-0.5 font-bold text-red-600" aria-hidden>
+            *
+          </span>
+        )}
+      </span>
       {children}
-      {hint && <span className="text-xs text-ink-secondary">{hint}</span>}
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {error ? (
+        <span role="alert" className="flex items-center gap-1 text-xs font-medium text-red-600">
+          <Icon name="alert" className="size-3.5 shrink-0" />
+          {error}
+        </span>
+      ) : (
+        hint && <span className="text-xs text-ink-secondary">{hint}</span>
+      )}
     </label>
   );
 }

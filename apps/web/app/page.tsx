@@ -23,14 +23,9 @@ const categories = [
       "https://images.unsplash.com/photo-1688604693147-ff99ce13e291?auto=format&fit=crop&w=900&h=900&q=85",
   },
   {
-    id: "apartment",
+    id: "studio",
     imageUrl:
       "https://images.unsplash.com/photo-1624204386084-dd8c05e32226?auto=format&fit=crop&w=900&h=900&q=85",
-  },
-  {
-    id: "hotel",
-    imageUrl:
-      "https://images.unsplash.com/photo-1663344552935-5bdbaa92454b?auto=format&fit=crop&w=900&h=900&q=85",
   },
 ] as const;
 
